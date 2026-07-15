@@ -54,9 +54,11 @@ export async function POST(request: NextRequest) {
   if (body.action === "suggest") {
     const shopeeCampaigns = await prisma.shopeeCampaign.findMany({
       where: { hub: null },
+      include: { shopeeAccount: true, hub: true },
     });
     const metaCampaigns = await prisma.metaCampaign.findMany({
       where: { hub: null, dailyStats: { some: { spendIDR: { gt: 0 } } } },
+      include: { metaAdAccount: true, hub: { include: { shopeeCampaign: true } } },
     });
 
     const suggestions: Array<{

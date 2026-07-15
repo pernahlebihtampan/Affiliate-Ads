@@ -78,6 +78,7 @@ export default function CampaignHubPage() {
     });
     if (res.ok) {
       showToast("Kampanye terhubung!", undefined, "success");
+      setSuggestions((prev) => prev.filter((s) => s.metaCampaignId !== metaId));
       fetchData();
     }
   };
@@ -110,6 +111,15 @@ export default function CampaignHubPage() {
 
   const unlinkedShopee = shopeeCampaigns.filter((s) => !s.hub);
 
+  const handleQuickLink = (metaId: number) => {
+    setSelectedMetaId(metaId);
+    setSelectedShopeeId(null);
+    const el = document.getElementById("manual-link-section");
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -137,7 +147,7 @@ export default function CampaignHubPage() {
         </div>
 
         {/* Manual Link */}
-        <div className="bg-white rounded-lg border p-4 space-y-3">
+        <div id="manual-link-section" className="bg-white rounded-lg border p-4 space-y-3">
           <h2 className="font-medium">Hubungkan Manual</h2>
           <div className="flex flex-wrap gap-3 items-end">
             <div>
@@ -147,7 +157,7 @@ export default function CampaignHubPage() {
               <select
                 value={selectedMetaId || ""}
                 onChange={(e) => setSelectedMetaId(parseInt(e.target.value) || null)}
-                className="px-3 py-2 border rounded-md text-sm w-64"
+                className="px-3 py-2 border rounded-md text-sm w-[32rem]"
               >
                 <option value="">-- Pilih --</option>
                 {metaCampaigns
@@ -166,7 +176,7 @@ export default function CampaignHubPage() {
               <select
                 value={selectedShopeeId || ""}
                 onChange={(e) => setSelectedShopeeId(parseInt(e.target.value) || null)}
-                className="px-3 py-2 border rounded-md text-sm w-64"
+                className="px-3 py-2 border rounded-md text-sm w-96"
               >
                 <option value="">-- Pilih --</option>
                 {unlinkedShopee.map((s) => (
@@ -240,9 +250,9 @@ export default function CampaignHubPage() {
               <thead>
                 <tr className="bg-gray-50 border-b">
                   <th className="text-left p-3 font-medium">Kampanye Meta</th>
+                  <th className="text-left p-3 font-medium">Tag Shopee</th>
                   <th className="text-left p-3 font-medium">Akun Meta</th>
                   <th className="text-left p-3 font-medium">Status</th>
-                  <th className="text-left p-3 font-medium">Tag Shopee</th>
                   <th className="text-left p-3 font-medium">Aksi</th>
                 </tr>
               </thead>
@@ -267,12 +277,6 @@ export default function CampaignHubPage() {
                     return (
                       <tr key={mc.id} className="border-b hover:bg-gray-50">
                         <td className="p-3 font-medium">{mc.name}</td>
-                        <td className="p-3 text-muted-foreground">
-                          {mc.metaAdAccount.name}
-                        </td>
-                        <td className="p-3">
-                          <span className="text-xs">{mc.status}</span>
-                        </td>
                         <td className="p-3">
                           {shopeeName ? (
                             <span className="text-green-700 font-medium">
@@ -281,6 +285,12 @@ export default function CampaignHubPage() {
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
+                        </td>
+                        <td className="p-3 text-muted-foreground">
+                          {mc.metaAdAccount.name}
+                        </td>
+                        <td className="p-3">
+                          <span className="text-xs">{mc.status}</span>
                         </td>
                         <td className="p-3">
                           {mc.hub ? (
@@ -291,9 +301,12 @@ export default function CampaignHubPage() {
                               Putus
                             </button>
                           ) : (
-                            <span className="text-xs text-muted-foreground">
-                              Menunggu koneksi
-                            </span>
+                            <button
+                              onClick={() => handleQuickLink(mc.id)}
+                              className="px-3 py-1 bg-blue-50 text-blue-700 rounded text-xs hover:bg-blue-100"
+                            >
+                              Hubungkan
+                            </button>
                           )}
                         </td>
                       </tr>

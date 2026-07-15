@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
+import { DailyChart } from "@/components/daily-chart";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
 interface DashboardRow {
@@ -51,13 +52,25 @@ interface OrganicStats {
   totalKomisi: number;
 }
 
+interface DailyDataPoint {
+  date: string;
+  komisi: number;
+  spend: number;
+  profit: number;
+}
+
 export default function DashboardPage() {
   const [rows, setRows] = useState<DashboardRow[]>([]);
   const [totals, setTotals] = useState<Totals | null>(null);
   const [organic, setOrganic] = useState<OrganicStats | null>(null);
+  const [dailyData, setDailyData] = useState<DailyDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().split("T")[0];
+  });
+  const [toDate, setToDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -65,11 +78,18 @@ export default function DashboardPage() {
       const params = new URLSearchParams();
       if (fromDate) params.set("from", fromDate);
       if (toDate) params.set("to", toDate);
+      
+      // Fetch main dashboard data
       const res = await fetch(`/api/dashboard?${params}`);
       const data = await res.json();
       setRows(data.rows || []);
       setTotals(data.totals);
       setOrganic(data.organicStats);
+
+      // Fetch daily chart data
+      const dailyRes = await fetch(`/api/dashboard/daily?${params}`);
+      const dailyData = await dailyRes.json();
+      setDailyData(dailyData || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -135,6 +155,9 @@ export default function DashboardPage() {
             <SummaryCard label="Klik Shopee" value={formatNumber(totals.shopeeClicks)} />
           </div>
         )}
+
+        {/* Daily Chart */}
+        {!loading && <DailyChart data={dailyData} />}
 
         {/* Organic Summary */}
         {organic && organic.totalKomisi > 0 && (
