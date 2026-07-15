@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model ShopeeAccount {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  campaigns  ShopeeCampaign[]
+  orderItems ShopeeOrderItem[]
+  clicks     ShopeeClick[]
+}
+
+model MetaAdAccount {
+  id    Int    @id @default(autoincrement())
+  name  String
+  actId String
+
+  campaigns MetaCampaign[]
+
+}
+
+model ShopeeCampaign {
+  id              Int    @id @default(autoincrement())
+  shopeeAccountId Int
+  name            String
+
+  shopeeAccount ShopeeAccount  @relation(fields: [shopeeAccountId], references: [id])
+  hub           CampaignHub?
+  orderItems    ShopeeOrderItem[]
+  clicks        ShopeeClick[]
+
+  @@unique([shopeeAccountId, name])
+}
+
+model MetaCampaign {
+  id              Int    @id @default(autoincrement())
+  metaAdAccountId Int
+  name            String
+  status          String @default("")
+
+  metaAdAccount MetaAdAccount @relation(fields: [metaAdAccountId], references: [id])
+  hub           CampaignHub?
+  dailyStats    MetaAdDaily[]
+
+  @@unique([metaAdAccountId, name])
+}
+
+model CampaignHub {
+  metaCampaignId  Int  @id
+  shopeeCampaignId Int @unique
+
+  metaCampaign   MetaCampaign   @relation(fields: [metaCampaignId], references: [id])
+  shopeeCampaign ShopeeCampaign @relation(fields: [shopeeCampaignId], references: [id])
+}
+
+model MetaAdDaily {
+  id               Int      @id @default(autoincrement())
+  metaCampaignId   Int
+  date             DateTime
+  spendIDR         Float    @default(0)
+  impressions      Int      @default(0)
+  reach            Int      @default(0)
+  frequency        Float    @default(0)
+  uniqueLinkClicks Int      @default(0)
+  results          Int      @default(0)
+  resultIndicator  String   @default("")
+  costPerResult    Float    @default(0)
+  delivery         String   @default("")
+  lastImportId     Int?
+
+  metaCampaign MetaCampaign @relation(fields: [metaCampaignId], references: [id])
+
+  @@unique([metaCampaignId, date])
+}
+
+model ShopeeOrderItem {
+  idPemesanan     String
+  idBarang        String
+  idModel         String
+  idPromosi       String
+
+  shopeeAccountId    Int
+  statusPesanan      String
+  waktuKlik          String
+  waktuPemesanan     String
+  waktuTerselesaikan String @default("")
+  namaToko           String
+  idShop             String
+  tipeToko           String
+  namaBarang         String
+  l1Kategori         String  @default("")
+  l2Kategori         String  @default("")
+  l3Kategori         String  @default("")
+  hargaRp            Float   @default(0)
+  jumlah             Int     @default(0)
+  nilaiPembelianRp   Float   @default(0)
+  refundRp           Float   @default(0)
+  komisiBersihRp     Float   @default(0)
+  statusProdukAffiliate String @default("")
+  tipePesanan        String  @default("")
+  statusPembelian    String  @default("")
+  tag1               String  @default("")
+  tag2               String  @default("")
+  tag3               String  @default("")
+  tag4               String  @default("")
+  tag5               String  @default("")
+  platform           String  @default("")
+  shopeeCampaignId   Int?
+  clickTimeUTC       DateTime?
+  orderTimeUTC       DateTime?
+  completeTimeUTC    DateTime?
+  lastImportId       Int?
+
+  shopeeAccount  ShopeeAccount?  @relation(fields: [shopeeAccountId], references: [id])
+  shopeeCampaign ShopeeCampaign? @relation(fields: [shopeeCampaignId], references: [id])
+
+  @@id([idPemesanan, idBarang, idModel, idPromosi])
+}
+
+model ShopeeClick {
+  klikId          String  @id
+  shopeeAccountId Int
+  waktuKlik       String
+  clickTimeUTC    DateTime?
+  wilayah         String  @default("")
+  tagRaw          String  @default("")
+  tag1            String  @default("")
+  tag2            String  @default("")
+  shopeeCampaignId Int?
+  perujuk         String  @default("")
+  lastImportId    Int?
+
+  shopeeAccount  ShopeeAccount  @relation(fields: [shopeeAccountId], references: [id])
+  shopeeCampaign ShopeeCampaign? @relation(fields: [shopeeCampaignId], references: [id])
+}
+
+model ImportBatch {
+  id             Int      @id @default(autoincrement())
+  type           String
+  accountId      Int
+  accountType    String
+  fileName       String
+  fileHash       String   @unique
+  fileCreatedTime DateTime?
+  importedAt     DateTime @default(now())
+  rowsInserted   Int      @default(0)
+  rowsUpdated    Int      @default(0)
+  rowsSkipped    Int      @default(0)
+}
+
+model Setting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+}
