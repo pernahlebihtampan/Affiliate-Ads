@@ -12,6 +12,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "File and accountId required" }, { status: 400 });
     }
 
+    // Properti file dikirim eksplisit oleh halaman import (multipart tidak membawa lastModified)
+    const lastModifiedRaw = formData.get("fileLastModified");
+    const fileSizeRaw = formData.get("fileSize");
+    const fileMeta = {
+      lastModified: lastModifiedRaw ? parseInt(lastModifiedRaw as string) : undefined,
+      size: fileSizeRaw ? parseInt(fileSizeRaw as string) : undefined,
+    };
+
     const content = await file.text();
     const { rows, errors: parseErrors } = parseMetaAdCsv(content);
 
@@ -19,7 +27,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No valid rows found", parseErrors }, { status: 400 });
     }
 
-    const result = await importMetaAdCsv(metaAdAccountId, file.name, rows);
+    const result = await importMetaAdCsv(metaAdAccountId, file.name, rows, fileMeta);
 
     return NextResponse.json({
       ...result,

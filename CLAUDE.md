@@ -54,9 +54,10 @@ Kunci penghubung: **`Tag_link1` Shopee ↔ nama kampanye Meta**, dipetakan manua
 `ShopeeAccount`, `MetaAdAccount` (master) → `ShopeeCampaign`, `MetaCampaign` (dibuat otomatis saat impor) → fakta `MetaAdDaily`, `ShopeeOrderItem`, `ShopeeClick`. `CampaignHub` menautkan Meta↔Shopee. `ImportBatch` audit impor. `Setting` key/value.
 
 - **`CampaignHub`**: PK di sisi Meta (`metaCampaignId`), `shopeeCampaignId @unique` → **1 Meta : 1 Shopee**. Menautkan Shopee yang sudah dipakai akan memutus tautan lama otomatis.
-- **`ShopeeOrderItem`**: PK gabungan `(idPemesanan, idBarang, idModel, idPromosi)`.
+- **`ShopeeOrderItem`**: PK gabungan `(idPemesanan, idBarang, idModel, idPromosi)`. Menyimpan **semua 47 kolom CSV** (termasuk persentase komisi, kolom MCN, dsb.) — **jangan buang baris/kolom apa pun saat import**, termasuk pesanan Dibatalkan (dikecualikan hanya saat agregasi baca). Estimasi komisi pesanan Dibatalkan (komisiBersihRp-nya 0): `hargaRp × (komisiShopeePct + komisiXtraPct) / 100` — dipakai seri bar abu-abu di grafik harian dashboard.
 - **`ShopeeClick`**: PK `klikId` (hash unik dari Shopee).
-- **`MetaAdDaily`**: unique `(metaCampaignId, date)`. Diperluas ke **28 kolom** dari CSV Meta baru (tambahan: `region, shopClicks, cpc, ctr, allClicks, allCtr, allCpc, landingPageViews, costPerLpv, cpm`).
+- **`MetaAdDaily`**: unique `(metaCampaignId, date, region)` — **grain per-wilayah**. Diperluas ke **28 kolom** dari CSV Meta baru (tambahan: `region, shopClicks, cpc, ctr, allClicks, allCtr, allCpc, landingPageViews, costPerLpv, cpm`). Baris legacy hasil agregasi lama punya `region = ""` dan dihapus otomatis oleh import saat `(kampanye, tanggal)` yang sama masuk dengan detail per-wilayah. Pembaca yang butuh angka harian **wajib SUM lintas wilayah** (dashboard & matching engine sudah; detail kampanye diagregasi di `/api/campaigns`).
+- **`ImportBatch`**: menyimpan `fileModifiedTime`/`fileSize` (dikirim eksplisit oleh halaman import — multipart tidak membawa `lastModified`). Import ditolak bila file **sama/lebih lawas** dari import terakhir per `(type, accountId)` (`checkFileIsNewer` di import-service), selain tolakan duplikat via `fileHash`.
 
 ## Aturan bisnis WAJIB (jangan langgar)
 
@@ -72,7 +73,7 @@ Kunci penghubung: **`Tag_link1` Shopee ↔ nama kampanye Meta**, dipetakan manua
 
 Header CSV Shopee asli mengandung typo yang **harus dicocokkan persis**: `Nama Barange`, `Kampanye Partnerr`, `Status Pemebelian`, `Tipe toko.` (dengan titik). CSV Click punya **BOM** di header (`﻿Klik ID` — sudah ditangani). CSV Meta punya varian nama kolom antar-ekspor (mis. `Klik tautan` vs `Klik Tautan Unik`) — parser mencoba beberapa alternatif.
 
-**⚠️ CSV Meta dipecah per-Wilayah.** Ekspor Meta punya kolom `Wilayah` → ~34 baris (satu per provinsi) untuk tiap `(kampanye, tanggal)`. `parseMetaAdCsv` **mengagregasi** (SUM spend/impresi/klik/reach/results/LPV, lalu hitung ulang rasio cpc/ctr/cpm/frequency) per `(nama|tanggal)`, **bukan** dedup ambil-satu-wilayah — kalau tidak, ~98% spend hilang (grain `MetaAdDaily` adalah `(campaign, date)`, tanpa dimensi wilayah). Kalau kelak butuh detail per-wilayah, skema harus diubah ke grain `(campaign, date, region)`.
+**⚠️ CSV Meta dipecah per-Wilayah.** Ekspor Meta punya kolom `Wilayah` → ~34 baris (satu per provinsi) untuk tiap `(kampanye, tanggal)`. Grain `MetaAdDaily` = `(campaign, date, region)`, jadi `parseMetaAdCsv` menyimpan baris **per-wilayah** (kunci agregasi `nama|tanggal|wilayah`, hanya menjumlah bila wilayah sama muncul dua kali; CSV lama tanpa kolom `Wilayah` otomatis teragregasi ke `region=""`). Jangan dedup ambil-satu-wilayah — ~98% spend hilang. Filter Wilayah di dashboard hanya menyaring metrik Meta (komisi Shopee tidak punya dimensi wilayah).
 
 **⚠️ Semua tanggal via `parseDateWib` (WIB-as-UTC).** `date` Meta & `*TimeUTC` Shopee dibangun dengan `Date.UTC(...)` dari digit mentah (lihat aturan bisnis #4) — tanggal ISO = tanggal WIB, jadi spend Meta & komisi Shopee sejajar (selisih 0 jam).
 

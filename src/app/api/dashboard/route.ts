@@ -41,11 +41,39 @@ export async function GET(request: NextRequest) {
   const metaAdAccountId = url.searchParams.get("metaAdAccountId")
     ? parseInt(url.searchParams.get("metaAdAccountId")!)
     : undefined;
+  // Filter opsional: substring nama kampanye Meta (case-insensitive) & wilayah Meta.
+  // Data Shopee tidak punya dimensi wilayah (CSV komisi tanpa kolom wilayah;
+  // "Wilayah Klik" = negara). Saat filter wilayah aktif, metrik Shopee
+  // di-PRORATA per (kampanye, tanggal klik) mengikuti porsi spend wilayah:
+  //   komisi_wilayah ≈ komisi × spend_wilayah / spend_total  → ESTIMASI.
+  const campaignQuery = url.searchParams.get("campaign")?.trim().toLowerCase() || "";
+  const region = url.searchParams.get("region") || "";
+  // Filter sisi Shopee: substring Tag_link1 (eksklusif dengan `campaign` — UI
+  // yang menjaga), plus filter exact level-item pesanan.
+  const tagQuery = url.searchParams.get("tag")?.trim().toLowerCase() || "";
+  const statusFilter = url.searchParams.get("status") || "";
+  const l1Filter = url.searchParams.get("l1") || "";
+  const l3Filter = url.searchParams.get("l3") || "";
+  const platformFilter = url.searchParams.get("platform") || "";
 
   const dateFilter = dateRange(fromDate, toDate);
   const clickFilter = clickRange(fromDate, toDate);
 
-  // Get all campaign hubs with their linked campaigns
+  // Filter level-item Shopee. statusPesanan HARUS satu key (aturan spread di
+  // atas): filter status menggantikan { not: "Dibatalkan" } — termasuk saat
+  // user sengaja memilih "Dibatalkan" untuk meninjau pesanan batal.
+  const itemWhere = {
+    statusPesanan: statusFilter || { not: "Dibatalkan" },
+    ...(l1Filter ? { l1Kategori: l1Filter } : {}),
+    // L3 dari input bebas (datalist) → substring, bukan exact
+    ...(l3Filter ? { l3Kategori: { contains: l3Filter } } : {}),
+    ...(platformFilter ? { platform: platformFilter } : {}),
+    ...(clickFilter ? { clickTimeUTC: clickFilter } : {}),
+  };
+
+  // Get all campaign hubs with their linked campaigns.
+  // dailyStats TIDAK difilter wilayah di query — spend total per tanggal tetap
+  // dibutuhkan sebagai penyebut rasio prorata; penyaringan wilayah di JS.
   const hubs = await prisma.campaignHub.findMany({
     include: {
       metaCampaign: {
@@ -62,10 +90,7 @@ export async function GET(request: NextRequest) {
         include: {
           shopeeAccount: true,
           orderItems: {
-            where: {
-              statusPesanan: { not: "Dibatalkan" },
-              ...(clickFilter ? { clickTimeUTC: clickFilter } : {}),
-            },
+            where: itemWhere,
           },
           clicks: {
             where: {
@@ -77,37 +102,92 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  // Filter by account if specified
+  // Filter by account / campaign name / tag Shopee if specified
   const filteredHubs = hubs.filter((hub) => {
     if (metaAdAccountId && hub.metaCampaign.metaAdAccountId !== metaAdAccountId) return false;
     if (shopeeAccountId && hub.shopeeCampaign.shopeeAccountId !== shopeeAccountId) return false;
+    if (campaignQuery && !hub.metaCampaign.name.toLowerCase().includes(campaignQuery)) return false;
+    if (tagQuery && !hub.shopeeCampaign.name.toLowerCase().includes(tagQuery)) return false;
     return true;
   });
 
   const rows = filteredHubs.map((hub) => {
-    const dailyStats = hub.metaCampaign.dailyStats;
+    const allStats = hub.metaCampaign.dailyStats;
+    const dailyStats = region ? allStats.filter((d) => d.region === region) : allStats;
     const orderItems = hub.shopeeCampaign.orderItems;
     const clicks = hub.shopeeCampaign.clicks;
+
+    // Rasio prorata per tanggal: porsi spend wilayah terhadap spend total
+    // kampanye ini. null = filter wilayah tidak aktif (rasio 1).
+    // Hari tanpa spend / klik tanpa tanggal memakai fallback rasio level
+    // periode — supaya Σ komisi semua wilayah = komisi total (tidak ada
+    // komisi yang "hilang" hanya karena jatuh di hari jeda iklan).
+    let ratioByDate: Map<string, number> | null = null;
+    let periodRatio = 0;
+    if (region) {
+      const regionSpend = new Map<string, number>();
+      const totalSpendByDate = new Map<string, number>();
+      let regionSum = 0;
+      let totalSum = 0;
+      for (const d of allStats) {
+        const k = d.date.toISOString().slice(0, 10);
+        totalSpendByDate.set(k, (totalSpendByDate.get(k) || 0) + d.spendIDR);
+        totalSum += d.spendIDR;
+        if (d.region === region) {
+          regionSpend.set(k, (regionSpend.get(k) || 0) + d.spendIDR);
+          regionSum += d.spendIDR;
+        }
+      }
+      periodRatio = totalSum > 0 ? regionSum / totalSum : 0;
+      ratioByDate = new Map();
+      for (const [k, tot] of totalSpendByDate) {
+        if (tot > 0) ratioByDate.set(k, (regionSpend.get(k) || 0) / tot);
+      }
+    }
+    const ratioFor = (dt: Date | null): number => {
+      if (!ratioByDate) return 1;
+      if (!dt) return periodRatio;
+      return ratioByDate.get(dt.toISOString().slice(0, 10)) ?? periodRatio;
+    };
 
     const totalSpend = dailyStats.reduce((s, d) => s + d.spendIDR, 0);
     const totalImpressions = dailyStats.reduce((s, d) => s + d.impressions, 0);
     const totalUniqueClicks = dailyStats.reduce((s, d) => s + d.uniqueLinkClicks, 0);
-    const totalOrders = new Set(orderItems.map((o) => o.idPemesanan)).size;
-    const totalItems = orderItems.length;
-    const totalNilaiPembelian = orderItems.reduce((s, o) => s + o.nilaiPembelianRp, 0);
 
-    // Split komisi by status
+    // Pesanan unik: prorata per pesanan berdasar tanggal klik item pertamanya
+    const orderClickTime = new Map<string, Date | null>();
+    for (const o of orderItems) {
+      if (!orderClickTime.has(o.idPemesanan)) orderClickTime.set(o.idPemesanan, o.clickTimeUTC);
+    }
+    const totalOrders = Math.round(
+      [...orderClickTime.values()].reduce((s, t) => s + ratioFor(t), 0)
+    );
+    const totalItems = Math.round(
+      orderItems.reduce((s, o) => s + ratioFor(o.clickTimeUTC), 0)
+    );
+    const totalNilaiPembelian = orderItems.reduce(
+      (s, o) => s + o.nilaiPembelianRp * ratioFor(o.clickTimeUTC), 0
+    );
+
+    // Split komisi by status (× rasio prorata wilayah)
     const komisiTertunda = orderItems
       .filter((o) => o.statusPesanan === "Tertunda")
-      .reduce((s, o) => s + o.komisiBersihRp, 0);
+      .reduce((s, o) => s + o.komisiBersihRp * ratioFor(o.clickTimeUTC), 0);
     const komisiSelesai = orderItems
       .filter((o) => o.statusPesanan === "Selesai")
-      .reduce((s, o) => s + o.komisiBersihRp, 0);
+      .reduce((s, o) => s + o.komisiBersihRp * ratioFor(o.clickTimeUTC), 0);
     const totalKomisi = komisiTertunda + komisiSelesai;
+
+    const shopeeClicks = Math.round(
+      clicks.reduce((s, c) => s + ratioFor(c.clickTimeUTC), 0)
+    );
 
     return {
       metaCampaignId: hub.metaCampaign.id,
       metaCampaignName: hub.metaCampaign.name,
+      // "Penayangan kampanye" terkini (active/inactive/archived) — di-update
+      // tiap import Meta
+      metaCampaignStatus: hub.metaCampaign.status,
       metaAccountName: hub.metaCampaign.metaAdAccount.name,
       shopeeCampaignId: hub.shopeeCampaign.id,
       shopeeCampaignName: hub.shopeeCampaign.name,
@@ -115,7 +195,7 @@ export async function GET(request: NextRequest) {
       spend: totalSpend,
       impressions: totalImpressions,
       metaClicks: totalUniqueClicks,
-      shopeeClicks: clicks.length,
+      shopeeClicks,
       orders: totalOrders,
       items: totalItems,
       nilaiPembelian: totalNilaiPembelian,
@@ -124,8 +204,8 @@ export async function GET(request: NextRequest) {
       totalKomisi,
       roas: totalSpend > 0 ? totalKomisi / totalSpend : 0,
       cpc: totalUniqueClicks > 0 ? totalSpend / totalUniqueClicks : 0,
-      epc: clicks.length > 0 ? totalKomisi / clicks.length : 0,
-      cr: clicks.length > 0 ? totalOrders / clicks.length : 0,
+      epc: shopeeClicks > 0 ? totalKomisi / shopeeClicks : 0,
+      cr: shopeeClicks > 0 ? totalOrders / shopeeClicks : 0,
     };
   });
 
@@ -145,23 +225,66 @@ export async function GET(request: NextRequest) {
   };
   totals.roas = totals.spend > 0 ? totals.totalKomisi / totals.spend : 0;
 
-  // Get unmapped (organic) data
-  const organicStats = await getOrganicStats(shopeeAccountId, fromDate ?? undefined, toDate ?? undefined);
+  // Get unmapped (organic) data — filter level-item ikut diterapkan;
+  // filter campaign/tag tidak (organik = tanpa kampanye)
+  const organicStats = await getOrganicStats(shopeeAccountId, fromDate ?? undefined, toDate ?? undefined, {
+    status: statusFilter, l1: l1Filter, l3: l3Filter, platform: platformFilter,
+  });
 
-  return NextResponse.json({ rows, totals, organicStats });
+  // Daftar nilai untuk dropdown filter ("" = nilai kosong, dikecualikan).
+  // "Dibatalkan" ikut ditawarkan — memilihnya sengaja menembus aturan exclude
+  // untuk meninjau pesanan batal (komisiBersihRp-nya 0; lihat seri estimasi
+  // komisi dibatalkan di grafik harian).
+  const [regionRows, statusRows, l1Rows, l3Rows, platformRows] = await Promise.all([
+    prisma.metaAdDaily.findMany({
+      where: { region: { not: "" } },
+      distinct: ["region"], select: { region: true }, orderBy: { region: "asc" },
+    }),
+    prisma.shopeeOrderItem.findMany({
+      where: { statusPesanan: { not: "" } },
+      distinct: ["statusPesanan"], select: { statusPesanan: true }, orderBy: { statusPesanan: "asc" },
+    }),
+    prisma.shopeeOrderItem.findMany({
+      where: { l1Kategori: { not: "" } },
+      distinct: ["l1Kategori"], select: { l1Kategori: true }, orderBy: { l1Kategori: "asc" },
+    }),
+    prisma.shopeeOrderItem.findMany({
+      where: { l3Kategori: { not: "" } },
+      distinct: ["l3Kategori"], select: { l3Kategori: true }, orderBy: { l3Kategori: "asc" },
+    }),
+    prisma.shopeeOrderItem.findMany({
+      where: { platform: { not: "" } },
+      distinct: ["platform"], select: { platform: true }, orderBy: { platform: "asc" },
+    }),
+  ]);
+  const regions = regionRows.map((r) => r.region);
+
+  // estimated: metrik Shopee (komisi/pesanan/klik) adalah hasil prorata wilayah
+  return NextResponse.json({
+    rows, totals, organicStats, regions,
+    statuses: statusRows.map((r) => r.statusPesanan),
+    l1Categories: l1Rows.map((r) => r.l1Kategori),
+    l3Categories: l3Rows.map((r) => r.l3Kategori),
+    platforms: platformRows.map((r) => r.platform),
+    estimated: !!region,
+  });
 }
 
 async function getOrganicStats(
-  shopeeAccountId?: number,
-  fromDate?: string,
-  toDate?: string
+  shopeeAccountId: number | undefined,
+  fromDate: string | undefined,
+  toDate: string | undefined,
+  itemFilters: { status: string; l1: string; l3: string; platform: string }
 ) {
   const clickFilter = clickRange(fromDate ?? null, toDate ?? null);
 
   const orderItems = await prisma.shopeeOrderItem.findMany({
     where: {
       shopeeCampaignId: null,
-      statusPesanan: { not: "Dibatalkan" },
+      statusPesanan: itemFilters.status || { not: "Dibatalkan" },
+      ...(itemFilters.l1 ? { l1Kategori: itemFilters.l1 } : {}),
+      ...(itemFilters.l3 ? { l3Kategori: { contains: itemFilters.l3 } } : {}),
+      ...(itemFilters.platform ? { platform: itemFilters.platform } : {}),
       ...(shopeeAccountId ? { shopeeAccountId } : {}),
       ...(clickFilter ? { clickTimeUTC: clickFilter } : {}),
     },

@@ -11,6 +11,49 @@ export interface ImportResult {
   errors: string[];
 }
 
+// Properti file dari browser (File.lastModified/File.size) — dikirim eksplisit
+// oleh halaman import karena multipart upload TIDAK membawa lastModified.
+export interface ImportFileMeta {
+  lastModified?: number; // epoch ms
+  size?: number;
+}
+
+// Tolak file yang sama/lebih lawas dari import terakhir untuk (type, accountId)
+// yang sama. File identik-konten sudah ditolak via fileHash; guard ini menangkap
+// ekspor lama yang isinya beda tapi datanya kedaluwarsa.
+async function checkFileIsNewer(
+  type: string,
+  accountId: number,
+  fileName: string,
+  fileMeta?: ImportFileMeta
+): Promise<string | null> {
+  if (!fileMeta?.lastModified) return null;
+  const prev = await prisma.importBatch.findFirst({
+    where: { type, accountId, fileModifiedTime: { not: null } },
+    orderBy: { fileModifiedTime: "desc" },
+  });
+  if (!prev?.fileModifiedTime) return null;
+
+  const incoming = new Date(fileMeta.lastModified);
+  if (incoming.getTime() <= prev.fileModifiedTime.getTime()) {
+    const fmt = (d: Date) =>
+      d.toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
+    return (
+      `File "${fileName}" (modifikasi ${fmt(incoming)}) sama atau lebih lawas dari ` +
+      `import terakhir "${prev.fileName}" (modifikasi ${fmt(prev.fileModifiedTime)}). ` +
+      `Ekspor ulang file yang lebih baru, atau import berurutan dari yang paling lama.`
+    );
+  }
+  return null;
+}
+
+function fileMetaData(fileMeta?: ImportFileMeta) {
+  return {
+    fileModifiedTime: fileMeta?.lastModified ? new Date(fileMeta.lastModified) : null,
+    fileSize: fileMeta?.size ?? null,
+  };
+}
+
 // Helper to save periodic progress
 async function saveProgress(batchId: number, result: ImportResult) {
   await prisma.importBatch.update({
@@ -27,7 +70,8 @@ async function saveProgress(batchId: number, result: ImportResult) {
 export async function importMetaAdCsv(
   metaAdAccountId: number,
   fileName: string,
-  rows: MetaAdRow[]
+  rows: MetaAdRow[],
+  fileMeta?: ImportFileMeta
 ): Promise<ImportResult> {
   const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: [] };
   const fileContent = JSON.stringify(rows);
@@ -40,19 +84,39 @@ export async function importMetaAdCsv(
     return result;
   }
 
+  const staleError = await checkFileIsNewer("meta", metaAdAccountId, fileName, fileMeta);
+  if (staleError) {
+    result.skipped = rows.length;
+    result.errors.push(staleError);
+    return result;
+  }
+
   const importBatch = await prisma.importBatch.create({
-    data: { type: "meta", accountId: metaAdAccountId, accountType: "meta", fileName, fileHash },
+    data: {
+      type: "meta", accountId: metaAdAccountId, accountType: "meta",
+      fileName, fileHash, ...fileMetaData(fileMeta),
+    },
   });
 
   // Pre-fetch existing campaigns for cache
   const existingCampaigns = await prisma.metaCampaign.findMany({ where: { metaAdAccountId } });
   const campaignMap = new Map(existingCampaigns.map(c => [c.name, c]));
 
+  // (kampanye, tanggal) yang baris agregat lamanya (region="") sudah dibersihkan
+  const legacyCleaned = new Set<string>();
+
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     // Tanggal Meta (WIB) disimpan sebagai 00:00Z tanggal kalender → bucket harian = tanggal WIB.
     const startDate = parseDateWib(row.startDate);
-    if (!startDate) { result.skipped++; continue; }
+    if (!startDate) {
+      // Jangan skip diam-diam — laporkan agar baris yang gagal terlihat
+      result.skipped++;
+      result.errors.push(
+        `Baris "${row.campaignName}" dilewati: tanggal "${row.startDate}" tidak terparse.`
+      );
+      continue;
+    }
 
     let campaign = campaignMap.get(row.campaignName);
     if (!campaign) {
@@ -65,8 +129,24 @@ export async function importMetaAdCsv(
       campaign.status = row.delivery;
     }
 
+    // Baris agregat lama (region="") untuk (kampanye, tanggal) ini harus dihapus
+    // saat data per-wilayah masuk — kalau tidak, spend terhitung dobel.
+    if (row.region !== "") {
+      const legacyKey = `${campaign.id}|${startDate.toISOString()}`;
+      if (!legacyCleaned.has(legacyKey)) {
+        await prisma.metaAdDaily.deleteMany({
+          where: { metaCampaignId: campaign.id, date: startDate, region: "" },
+        });
+        legacyCleaned.add(legacyKey);
+      }
+    }
+
     const existingDaily = await prisma.metaAdDaily.findUnique({
-      where: { metaCampaignId_date: { metaCampaignId: campaign.id, date: startDate } },
+      where: {
+        metaCampaignId_date_region: {
+          metaCampaignId: campaign.id, date: startDate, region: row.region,
+        },
+      },
     });
 
     const dailyData = {
@@ -101,7 +181,8 @@ export async function importMetaAdCsv(
 export async function importShopeeClickCsv(
   shopeeAccountId: number,
   fileName: string,
-  rows: ShopeeClickRow[]
+  rows: ShopeeClickRow[],
+  fileMeta?: ImportFileMeta
 ): Promise<ImportResult> {
   const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: [] };
   const fileContent = JSON.stringify(rows);
@@ -114,8 +195,18 @@ export async function importShopeeClickCsv(
     return result;
   }
 
+  const staleError = await checkFileIsNewer("shopee_click", shopeeAccountId, fileName, fileMeta);
+  if (staleError) {
+    result.skipped = rows.length;
+    result.errors.push(staleError);
+    return result;
+  }
+
   const importBatch = await prisma.importBatch.create({
-    data: { type: "shopee_click", accountId: shopeeAccountId, accountType: "shopee", fileName, fileHash },
+    data: {
+      type: "shopee_click", accountId: shopeeAccountId, accountType: "shopee",
+      fileName, fileHash, ...fileMetaData(fileMeta),
+    },
   });
 
   // Pre-fetch campaigns
@@ -168,7 +259,8 @@ export async function importShopeeClickCsv(
 export async function importShopeeCommissionCsv(
   shopeeAccountId: number,
   fileName: string,
-  rows: ShopeeCommissionRow[]
+  rows: ShopeeCommissionRow[],
+  fileMeta?: ImportFileMeta
 ): Promise<ImportResult> {
   const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: [] };
   const fileContent = JSON.stringify(rows);
@@ -181,8 +273,18 @@ export async function importShopeeCommissionCsv(
     return result;
   }
 
+  const staleError = await checkFileIsNewer("shopee_commission", shopeeAccountId, fileName, fileMeta);
+  if (staleError) {
+    result.skipped = rows.length;
+    result.errors.push(staleError);
+    return result;
+  }
+
   const importBatch = await prisma.importBatch.create({
-    data: { type: "shopee_commission", accountId: shopeeAccountId, accountType: "shopee", fileName, fileHash },
+    data: {
+      type: "shopee_commission", accountId: shopeeAccountId, accountType: "shopee",
+      fileName, fileHash, ...fileMetaData(fileMeta),
+    },
   });
 
   // Pre-fetch campaigns
@@ -224,6 +326,24 @@ export async function importShopeeCommissionCsv(
       hargaRp: row.hargaRp, jumlah: row.jumlah,
       nilaiPembelianRp: row.nilaiPembelianRp, refundRp: row.refundRp,
       komisiBersihRp: row.komisiBersihRp,
+      komisiShopeePct: row.komisiShopeePct,
+      komisiXtraPct: row.komisiXtraPct,
+      kodePesananAffiliate: row.kodePesananAffiliate,
+      tipeProduk: row.tipeProduk,
+      tipePenawaran: row.tipePenawaran,
+      kampanyePartner: row.kampanyePartner,
+      komisiBarangShopeeRp: row.komisiBarangShopeeRp,
+      komisiXtraProdukRp: row.komisiXtraProdukRp,
+      totalKomisiProdukRp: row.totalKomisiProdukRp,
+      komisiShopeePesananRp: row.komisiShopeePesananRp,
+      komisiXtraPesananRp: row.komisiXtraPesananRp,
+      totalKomisiPesananRp: row.totalKomisiPesananRp,
+      namaMcn: row.namaMcn,
+      idKontrakMcn: row.idKontrakMcn,
+      biayaMcnPct: row.biayaMcnPct,
+      biayaMcnRp: row.biayaMcnRp,
+      pembagianKomisiPct: row.pembagianKomisiPct,
+      catatanProduk: row.catatanProduk,
       statusProdukAffiliate: row.statusProdukAffiliate,
       tipePesanan: row.tipePesanan, statusPembelian: row.statusPembelian,
       tag1: row.tag1, tag2: row.tag2, tag3: row.tag3, tag4: row.tag4, tag5: row.tag5,

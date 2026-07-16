@@ -19,12 +19,43 @@ export async function GET(request: NextRequest) {
 
       if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+      // Grain MetaAdDaily kini per-wilayah → agregasikan per tanggal supaya
+      // halaman detail tetap menampilkan satu baris per hari.
+      const byDate = new Map<string, (typeof campaign.dailyStats)[number]>();
+      for (const stat of campaign.dailyStats) {
+        const key = stat.date.toISOString();
+        const acc = byDate.get(key);
+        if (!acc) {
+          byDate.set(key, { ...stat, region: "" });
+        } else {
+          acc.spendIDR += stat.spendIDR;
+          acc.impressions += stat.impressions;
+          acc.reach += stat.reach;
+          acc.uniqueLinkClicks += stat.uniqueLinkClicks;
+          acc.results += stat.results;
+          acc.shopClicks += stat.shopClicks;
+          acc.allClicks += stat.allClicks;
+          acc.landingPageViews += stat.landingPageViews;
+        }
+      }
+      const aggregated = [...byDate.values()].map((s) => ({
+        ...s,
+        frequency: s.reach > 0 ? s.impressions / s.reach : 0,
+        cpc: s.uniqueLinkClicks > 0 ? s.spendIDR / s.uniqueLinkClicks : 0,
+        ctr: s.impressions > 0 ? s.uniqueLinkClicks / s.impressions : 0,
+        cpm: s.impressions > 0 ? (s.spendIDR / s.impressions) * 1000 : 0,
+        costPerResult: s.results > 0 ? s.spendIDR / s.results : 0,
+      }));
+
       // Get linked Shopee data
       const shopeeData = campaign.hub
         ? await getShopeeCampaignDetail(campaign.hub.shopeeCampaignId)
         : null;
 
-      return NextResponse.json({ campaign, shopeeData });
+      return NextResponse.json({
+        campaign: { ...campaign, dailyStats: aggregated },
+        shopeeData,
+      });
     }
 
     if (type === "shopee") {

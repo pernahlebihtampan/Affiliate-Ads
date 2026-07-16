@@ -89,7 +89,10 @@ model MetaAdDaily {
 
   metaCampaign MetaCampaign @relation(fields: [metaCampaignId], references: [id])
 
-  @@unique([metaCampaignId, date])
+  // Grain per-wilayah: satu baris per (kampanye, tanggal, wilayah).
+  // Baris lama hasil agregasi punya region = "" dan dihapus otomatis saat
+  // (kampanye, tanggal) yang sama diimpor ulang dengan detail per-wilayah.
+  @@unique([metaCampaignId, date, region])
 }
 
 model ShopeeOrderItem {
@@ -115,6 +118,28 @@ model ShopeeOrderItem {
   nilaiPembelianRp   Float   @default(0)
   refundRp           Float   @default(0)
   komisiBersihRp     Float   @default(0)
+  // Persentase komisi produk (angka persen, mis. 1.5 = 1,50%) — dipakai untuk
+  // estimasi komisi pesanan Dibatalkan (komisiBersihRp-nya selalu 0):
+  //   estimasi = hargaRp × (komisiShopeePct + komisiXtraPct) / 100
+  komisiShopeePct    Float   @default(0)
+  komisiXtraPct      Float   @default(0)
+  // Kolom CSV komisi lain — disimpan lengkap agar tidak ada data yang dibuang
+  kodePesananAffiliate  String @default("")
+  tipeProduk            String @default("")
+  tipePenawaran         String @default("")
+  kampanyePartner       String @default("")
+  komisiBarangShopeeRp  Float  @default(0)
+  komisiXtraProdukRp    Float  @default(0)
+  totalKomisiProdukRp   Float  @default(0)
+  komisiShopeePesananRp Float  @default(0)
+  komisiXtraPesananRp   Float  @default(0)
+  totalKomisiPesananRp  Float  @default(0)
+  namaMcn               String @default("")
+  idKontrakMcn          String @default("")
+  biayaMcnPct           Float  @default(0)
+  biayaMcnRp            Float  @default(0)
+  pembagianKomisiPct    Float  @default(0)
+  catatanProduk         String @default("")
   statusProdukAffiliate String @default("")
   tipePesanan        String  @default("")
   statusPembelian    String  @default("")
@@ -161,6 +186,10 @@ model ImportBatch {
   fileName       String
   fileHash       String   @unique
   fileCreatedTime DateTime?
+  // Properti file dari browser (File.lastModified & File.size) — dipakai untuk
+  // menolak import file yang sama/lebih lawas dari import sebelumnya.
+  fileModifiedTime DateTime?
+  fileSize       Int?
   importedAt     DateTime @default(now())
   rowsInserted   Int      @default(0)
   rowsUpdated    Int      @default(0)

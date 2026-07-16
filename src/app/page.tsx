@@ -8,6 +8,7 @@ import { formatCurrency, formatNumber } from "@/lib/utils";
 interface DashboardRow {
   metaCampaignId: number;
   metaCampaignName: string;
+  metaCampaignStatus: string;
   metaAccountName: string;
   shopeeCampaignId: number;
   shopeeCampaignName: string;
@@ -57,6 +58,8 @@ interface DailyDataPoint {
   komisi: number;
   spend: number;
   profit: number;
+  profitSelesai: number;
+  komisiDibatalkan: number;
 }
 
 export default function DashboardPage() {
@@ -71,6 +74,29 @@ export default function DashboardPage() {
     return d.toISOString().split("T")[0];
   });
   const [toDate, setToDate] = useState(() => new Date().toISOString().split("T")[0]);
+  // Filter opsional (campaignInput/tagInput di-debounce → *Filter agar tidak
+  // fetch tiap ketikan). campaignInput & tagInput saling eksklusif — mengisi
+  // satu menonaktifkan yang lain (dua sisi dari tautan hub yang sama).
+  const [campaignInput, setCampaignInput] = useState("");
+  const [campaignFilter, setCampaignFilter] = useState("");
+  const [tagInput, setTagInput] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [regionFilter, setRegionFilter] = useState("");
+  const [regions, setRegions] = useState<string[]>([]);
+  // Filter level-item Shopee
+  const [statusFilter, setStatusFilter] = useState("");
+  const [l1Filter, setL1Filter] = useState("");
+  // L3: input bebas + datalist (978 kategori) — substring, di-debounce
+  const [l3Input, setL3Input] = useState("");
+  const [l3Filter, setL3Filter] = useState("");
+  const [platformFilter, setPlatformFilter] = useState("");
+  const [statuses, setStatuses] = useState<string[]>([]);
+  const [l1Categories, setL1Categories] = useState<string[]>([]);
+  const [l3Categories, setL3Categories] = useState<string[]>([]);
+  const [platforms, setPlatforms] = useState<string[]>([]);
+  // Sortir tabel (klik header). null = urutan asli dari API.
+  const [sortKey, setSortKey] = useState<keyof DashboardRow | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -78,13 +104,25 @@ export default function DashboardPage() {
       const params = new URLSearchParams();
       if (fromDate) params.set("from", fromDate);
       if (toDate) params.set("to", toDate);
-      
+      if (campaignFilter.trim()) params.set("campaign", campaignFilter.trim());
+      if (tagFilter.trim()) params.set("tag", tagFilter.trim());
+      if (regionFilter) params.set("region", regionFilter);
+      if (statusFilter) params.set("status", statusFilter);
+      if (l1Filter) params.set("l1", l1Filter);
+      if (l3Filter) params.set("l3", l3Filter);
+      if (platformFilter) params.set("platform", platformFilter);
+
       // Fetch main dashboard data
       const res = await fetch(`/api/dashboard?${params}`);
       const data = await res.json();
       setRows(data.rows || []);
       setTotals(data.totals);
       setOrganic(data.organicStats);
+      setRegions(data.regions || []);
+      setStatuses(data.statuses || []);
+      setL1Categories(data.l1Categories || []);
+      setL3Categories(data.l3Categories || []);
+      setPlatforms(data.platforms || []);
 
       // Fetch daily chart data
       const dailyRes = await fetch(`/api/dashboard/daily?${params}`);
@@ -95,11 +133,47 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate]);
+  }, [fromDate, toDate, campaignFilter, tagFilter, regionFilter, statusFilter, l1Filter, l3Filter, platformFilter]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Debounce input nama kampanye & tag Shopee 400ms
+  useEffect(() => {
+    const t = setTimeout(() => setCampaignFilter(campaignInput), 400);
+    return () => clearTimeout(t);
+  }, [campaignInput]);
+  useEffect(() => {
+    const t = setTimeout(() => setTagFilter(tagInput), 400);
+    return () => clearTimeout(t);
+  }, [tagInput]);
+  useEffect(() => {
+    const t = setTimeout(() => setL3Filter(l3Input), 400);
+    return () => clearTimeout(t);
+  }, [l3Input]);
+
+  const handleSort = (key: keyof DashboardRow) => {
+    if (sortKey === key) {
+      setSortDir(sortDir === "desc" ? "asc" : "desc");
+    } else {
+      setSortKey(key);
+      // Kolom teks enak dimulai A→Z; angka dimulai dari terbesar
+      setSortDir(typeof rows[0]?.[key] === "string" ? "asc" : "desc");
+    }
+  };
+
+  const sortedRows = sortKey
+    ? [...rows].sort((a, b) => {
+        const va = a[sortKey];
+        const vb = b[sortKey];
+        const cmp =
+          typeof va === "string" && typeof vb === "string"
+            ? va.localeCompare(vb, "id-ID")
+            : Number(va) - Number(vb);
+        return sortDir === "asc" ? cmp : -cmp;
+      })
+    : rows;
 
   const getRoasColor = (roas: number) => {
     if (roas < 1) return "text-red-600 bg-red-50";
@@ -140,11 +214,130 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Filter opsional */}
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            value={campaignInput}
+            onChange={(e) => setCampaignInput(e.target.value)}
+            disabled={!!tagInput}
+            placeholder="Filter nama kampanye Meta…"
+            title={tagInput ? "Nonaktif — sedang memfilter Tag Shopee (kedua filter menyaring pasangan hub yang sama)" : undefined}
+            className="px-3 py-1.5 border rounded-md text-sm w-56 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+          />
+          <input
+            type="text"
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            disabled={!!campaignInput}
+            placeholder="Filter Tag Shopee…"
+            title={campaignInput ? "Nonaktif — sedang memfilter nama kampanye Meta (kedua filter menyaring pasangan hub yang sama)" : undefined}
+            className="px-3 py-1.5 border rounded-md text-sm w-48 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+          />
+          <select
+            value={regionFilter}
+            onChange={(e) => setRegionFilter(e.target.value)}
+            className="px-3 py-1.5 border rounded-md text-sm bg-white"
+            title="Wilayah menyaring metrik Meta; komisi Shopee diestimasi prorata"
+          >
+            <option value="">Semua wilayah</option>
+            {regions.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-1.5 border rounded-md text-sm bg-white"
+          >
+            <option value="">Semua status</option>
+            {statuses.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <select
+            value={l1Filter}
+            onChange={(e) => setL1Filter(e.target.value)}
+            className="px-3 py-1.5 border rounded-md text-sm bg-white max-w-48"
+          >
+            <option value="">Semua L1 kategori</option>
+            {l1Categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <input
+            type="text"
+            list="l3-kategori-list"
+            value={l3Input}
+            onChange={(e) => setL3Input(e.target.value)}
+            placeholder="L3 kategori…"
+            className="px-3 py-1.5 border rounded-md text-sm w-48"
+          />
+          <datalist id="l3-kategori-list">
+            {l3Categories.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+          <select
+            value={platformFilter}
+            onChange={(e) => setPlatformFilter(e.target.value)}
+            className="px-3 py-1.5 border rounded-md text-sm bg-white"
+          >
+            <option value="">Semua platform</option>
+            {platforms.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+          {(campaignInput || tagInput || regionFilter || statusFilter || l1Filter || l3Input || platformFilter) && (
+            <button
+              onClick={() => {
+                setCampaignInput("");
+                setCampaignFilter("");
+                setTagInput("");
+                setTagFilter("");
+                setRegionFilter("");
+                setStatusFilter("");
+                setL1Filter("");
+                setL3Input("");
+                setL3Filter("");
+                setPlatformFilter("");
+              }}
+              className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground border rounded-md"
+            >
+              ✕ Bersihkan filter
+            </button>
+          )}
+          {regionFilter && (
+            <span className="text-xs text-muted-foreground">
+              ± Komisi/pesanan/klik Shopee = <b>estimasi prorata</b> porsi spend
+              wilayah per kampanye per tanggal (data Shopee tidak punya dimensi
+              wilayah).
+            </span>
+          )}
+          {(statusFilter || l1Filter || l3Filter || platformFilter) && (
+            <span className="text-xs text-muted-foreground">
+              ℹ️ Filter status/kategori/platform hanya menyaring komisi & pesanan
+              Shopee — spend Meta tetap penuh, jadi ROAS turun.
+            </span>
+          )}
+        </div>
+
         {/* Summary Cards */}
         {totals && (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             <SummaryCard label="Total Spend" value={formatCurrency(totals.spend)} />
-            <SummaryCard label="Total Komisi" value={formatCurrency(totals.totalKomisi)} />
+            <SummaryCard
+              label={regionFilter ? "Total Komisi (estimasi)" : "Total Komisi"}
+              value={(regionFilter ? "±" : "") + formatCurrency(totals.totalKomisi)}
+            />
             <SummaryCard
               label="ROAS"
               value={totals.roas.toFixed(2) + "x"}
@@ -200,36 +393,40 @@ export default function DashboardPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b">
-                  <th className="text-left p-3 font-medium">Kampanye Meta</th>
-                  <th className="text-left p-3 font-medium">Akun</th>
-                  <th className="text-left p-3 font-medium">Tag Shopee</th>
-                  <th className="text-right p-3 font-medium">Spend</th>
-                  <th className="text-right p-3 font-medium">Klik Meta</th>
-                  <th className="text-right p-3 font-medium">Klik Shopee</th>
-                  <th className="text-right p-3 font-medium">Pesanan</th>
-                  <th className="text-right p-3 font-medium">Komisi</th>
-                  <th className="text-right p-3 font-medium">ROAS</th>
+                  <SortableTh label="On/Off" sortKeyName="metaCampaignStatus" align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortableTh label="Kampanye Meta" sortKeyName="metaCampaignName" align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortableTh label="Akun" sortKeyName="metaAccountName" align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortableTh label="Tag Shopee" sortKeyName="shopeeCampaignName" align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortableTh label="Spend" sortKeyName="spend" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortableTh label="Klik Meta" sortKeyName="metaClicks" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortableTh label="Klik Shopee" sortKeyName="shopeeClicks" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortableTh label="Pesanan" sortKeyName="orders" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortableTh label="Komisi" sortKeyName="totalKomisi" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortableTh label="ROAS" sortKeyName="roas" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={10} className="p-6 text-center text-muted-foreground">
                       Memuat data...
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={10} className="p-6 text-center text-muted-foreground">
                       Belum ada data. Import CSV atau hubungkan kampanye di Campaign Hub.
                     </td>
                   </tr>
                 ) : (
-                  rows.map((row) => (
+                  sortedRows.map((row) => (
                     <tr
                       key={row.metaCampaignId}
                       className="border-b hover:bg-gray-50"
                     >
+                      <td className="p-3">
+                        <StatusIndicator status={row.metaCampaignStatus} />
+                      </td>
                       <td className="p-3">
                         <a
                           href={`/campaign/${row.metaCampaignId}`}
@@ -257,6 +454,7 @@ export default function DashboardPage() {
                         {formatNumber(row.orders)}
                       </td>
                       <td className="p-3 text-right">
+                        {regionFilter && "±"}
                         {formatCurrency(row.totalKomisi)}
                         {row.komisiTertunda > 0 && (
                           <span className="text-xs text-muted-foreground ml-1">
@@ -280,14 +478,17 @@ export default function DashboardPage() {
               {totals && rows.length > 0 && (
                 <tfoot>
                   <tr className="bg-gray-50 font-medium">
-                    <td className="p-3" colSpan={3}>
+                    <td className="p-3" colSpan={4}>
                       Total ({rows.length} kampanye)
                     </td>
                     <td className="p-3 text-right">{formatCurrency(totals.spend)}</td>
                     <td className="p-3 text-right">{formatNumber(totals.metaClicks)}</td>
                     <td className="p-3 text-right">{formatNumber(totals.shopeeClicks)}</td>
                     <td className="p-3 text-right">{formatNumber(totals.orders)}</td>
-                    <td className="p-3 text-right">{formatCurrency(totals.totalKomisi)}</td>
+                    <td className="p-3 text-right">
+                      {regionFilter && "±"}
+                      {formatCurrency(totals.totalKomisi)}
+                    </td>
                     <td className="p-3 text-right">
                       <span
                         className={`px-2 py-0.5 rounded text-xs font-medium ${getRoasColor(
@@ -305,6 +506,70 @@ export default function DashboardPage() {
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+// Indikator on/off kampanye Meta (read-only) — dari "Penayangan kampanye":
+// active = ON hijau; inactive = OFF abu-abu; archived = saklar kosong
+// (tanpa knob — bukan lagi on/off, kampanyenya sudah diarsipkan)
+function StatusIndicator({ status }: { status: string }) {
+  const isOn = status === "active";
+  const isArchived = status === "archived";
+  const label = isOn ? "On" : isArchived ? "Arsip" : "Off";
+  return (
+    <span
+      title={`Penayangan kampanye: ${status || "tidak diketahui"}`}
+      className="inline-flex items-center gap-1.5 cursor-default"
+    >
+      <span
+        className={`relative inline-block w-7 h-4 rounded-full transition-colors ${
+          isOn ? "bg-green-500" : "bg-gray-300"
+        }`}
+      >
+        {!isArchived && (
+          <span
+            className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow ${
+              isOn ? "right-0.5" : "left-0.5"
+            }`}
+          />
+        )}
+      </span>
+      <span className={`text-xs ${isOn ? "text-green-700" : "text-muted-foreground"}`}>
+        {label}
+      </span>
+    </span>
+  );
+}
+
+function SortableTh({
+  label,
+  sortKeyName,
+  align,
+  sortKey,
+  sortDir,
+  onSort,
+}: {
+  label: string;
+  sortKeyName: keyof DashboardRow;
+  align: "left" | "right";
+  sortKey: keyof DashboardRow | null;
+  sortDir: "asc" | "desc";
+  onSort: (key: keyof DashboardRow) => void;
+}) {
+  const active = sortKey === sortKeyName;
+  return (
+    <th
+      onClick={() => onSort(sortKeyName)}
+      className={`p-3 font-medium cursor-pointer select-none hover:bg-gray-100 ${
+        align === "right" ? "text-right" : "text-left"
+      } ${active ? "text-primary" : ""}`}
+      title={`Urutkan berdasarkan ${label}`}
+    >
+      {label}
+      <span className="inline-block w-3 ml-0.5 text-xs">
+        {active ? (sortDir === "asc" ? "▲" : "▼") : ""}
+      </span>
+    </th>
   );
 }
 

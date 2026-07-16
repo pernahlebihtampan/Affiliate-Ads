@@ -44,9 +44,9 @@ export function parseMetaAdCsv(content: string): { rows: MetaAdRow[]; errors: st
   const errors: string[] = [];
 
   // CSV Meta versi baru dipecah per-Wilayah: ada ~34 baris (satu per provinsi) untuk
-  // tiap (kampanye, tanggal). Jangan dedup ambil-satu-wilayah (dulu membuang ~98% spend);
-  // AGREGASIKAN dengan menjumlahkan metrik dasar per (kampanye|tanggal), lalu hitung
-  // ulang rasio (cpc/ctr/cpm/frequency) dari hasil penjumlahan.
+  // tiap (kampanye, tanggal). Grain MetaAdDaily = (kampanye, tanggal, wilayah), jadi
+  // baris disimpan PER-WILAYAH. Map agregasi tetap dipakai (kunci menyertakan wilayah)
+  // untuk berjaga bila satu wilayah muncul dua kali dalam satu file.
   const agg = new Map<string, MetaAdRow>();
 
   for (let i = 0; i < result.data.length; i++) {
@@ -58,7 +58,8 @@ export function parseMetaAdCsv(content: string): { rows: MetaAdRow[]; errors: st
 
     const name = raw["Nama kampanye"] || "";
     const startDate = raw["Awal pelaporan"] || "";
-    const key = `${name}|${startDate}`;
+    const region = raw["Wilayah"] || "";
+    const key = `${name}|${startDate}|${region}`;
 
     // Handle column name variants (old CSV vs new CSV)
     // Old: "Klik Tautan Unik"  New: "Klik tautan"
@@ -75,7 +76,7 @@ export function parseMetaAdCsv(content: string): { rows: MetaAdRow[]; errors: st
 
     const existing = agg.get(key);
     if (existing) {
-      // Jumlahkan metrik yang aditif lintas wilayah
+      // Jumlahkan metrik aditif bila wilayah yang sama muncul dua kali
       existing.spend += spend;
       existing.impressions += impressions;
       existing.reach += reach;
@@ -105,7 +106,7 @@ export function parseMetaAdCsv(content: string): { rows: MetaAdRow[]; errors: st
         resultsInitial: raw["Hasil (awal)"] || "",
         resultIndicatorInitial: raw["Indikator hasil (awal)"] || "",
 
-        region: "", // agregat semua wilayah (bukan satu provinsi)
+        region,
         shopClicks,
         cpc: 0,
         ctr: 0,
@@ -204,6 +205,19 @@ export interface ShopeeCommissionRow {
   nilaiPembelianRp: number;
   refundRp: number;
   komisiBersihRp: number;
+  komisiShopeePct: number;
+  komisiXtraPct: number;
+  komisiBarangShopeeRp: number;
+  komisiXtraProdukRp: number;
+  totalKomisiProdukRp: number;
+  komisiShopeePesananRp: number;
+  komisiXtraPesananRp: number;
+  totalKomisiPesananRp: number;
+  namaMcn: string;
+  idKontrakMcn: string;
+  biayaMcnPct: number;
+  biayaMcnRp: number;
+  pembagianKomisiPct: number;
   statusProdukAffiliate: string;
   catatanProduk: string;
   tipePesanan: string;
@@ -265,6 +279,20 @@ export function parseShopeeCommissionCsv(content: string): { rows: ShopeeCommiss
       nilaiPembelianRp: parseFloatSafe(raw["Nilai Pembelian(Rp)"]),
       refundRp: parseFloatSafe(raw["Jumlah Pengembalian Dana(Rp)"]),
       komisiBersihRp: parseFloatSafe(raw["Komisi Bersih Affiliate (Rp)"]),
+      // "1.50%" → 1.5 (parseFloat berhenti di "%")
+      komisiShopeePct: parseFloatSafe(raw["Persentase Komisi Shopee pada Produk"]),
+      komisiXtraPct: parseFloatSafe(raw["Persentase Komisi XTRA pada Produk"]),
+      komisiBarangShopeeRp: parseFloatSafe(raw["Komisi Barang Shopee(Rp)"]),
+      komisiXtraProdukRp: parseFloatSafe(raw["Komisi XTRA Produk(Rp)"]),
+      totalKomisiProdukRp: parseFloatSafe(raw["Total Komisi per Produk(Rp)"]),
+      komisiShopeePesananRp: parseFloatSafe(raw["Komisi Shopee per Pesanan(Rp)"]),
+      komisiXtraPesananRp: parseFloatSafe(raw["Komisi XTRA per Pesanan(Rp)"]),
+      totalKomisiPesananRp: parseFloatSafe(raw["Total Komisi per Pesanan(Rp)"]),
+      namaMcn: raw["Nama MCN Terhubung"] || "",
+      idKontrakMcn: raw["ID Kontrak MCN"] || "",
+      biayaMcnPct: parseFloatSafe(raw["Persentase Biaya Manajemen MCN"]),
+      biayaMcnRp: parseFloatSafe(raw["Biaya Manajemen MCN(Rp)"]),
+      pembagianKomisiPct: parseFloatSafe(raw["Persentase Pembagian Komisi Affiliate"]),
       statusProdukAffiliate: raw["Status Produk Affiliate"] || "",
       catatanProduk: raw["Catatan Produk"] || "",
       tipePesanan: raw["Tipe Pesanan"] || "",

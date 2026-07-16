@@ -100,6 +100,10 @@ export default function ImportPage() {
       const formData = new FormData();
       formData.set("file", file);
       formData.set("accountId", String(selectedAccountId));
+      // Multipart upload tidak membawa lastModified — kirim eksplisit agar
+      // server bisa menolak file yang sama/lebih lawas dari import sebelumnya.
+      formData.set("fileLastModified", String(file.lastModified));
+      formData.set("fileSize", String(file.size));
 
       const endpointMap: Record<ImportType, string> = {
         meta: "/api/import/meta",
@@ -115,11 +119,18 @@ export default function ImportPage() {
 
       if (res.ok) {
         setResult(data);
-        showToast(
-          "Import berhasil",
-          `${data.inserted} baru, ${data.updated} update, ${data.skipped} skip`,
-          data.inserted > 0 ? "success" : "default"
-        );
+        // File ditolak (duplikat / lebih lawas) → semua baris skip + ada pesan error
+        const rejected =
+          data.inserted === 0 && data.updated === 0 && data.errors?.length > 0;
+        if (rejected) {
+          showToast("Import ditolak", data.errors[0], "destructive");
+        } else {
+          showToast(
+            "Import berhasil",
+            `${data.inserted} baru, ${data.updated} update, ${data.skipped} skip`,
+            data.inserted > 0 ? "success" : "default"
+          );
+        }
       } else {
         showToast("Import gagal", data.error, "destructive");
       }
