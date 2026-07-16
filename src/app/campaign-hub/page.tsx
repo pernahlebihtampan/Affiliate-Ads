@@ -25,6 +25,8 @@ interface Suggestion {
   shopeeCampaignId: number;
   shopeeCampaignName: string;
   score: number;
+  nameScore?: number;
+  dataScore?: number | null; // null = data pesanan tidak cukup untuk dinilai
 }
 
 // ===== SEARCH SELECT COMPONENT =====
@@ -458,7 +460,9 @@ export default function CampaignHubPage() {
                     <span className="text-muted-foreground mx-2">→</span>
                     <span>{s.shopeeCampaignName}</span>
                     <span className="ml-2 text-xs text-muted-foreground">
-                      (kecocokan: {s.score}%)
+                      (kecocokan: {s.score}%
+                      {s.nameScore != null && ` · nama ${s.nameScore}%`}
+                      {s.dataScore != null ? ` · 📊 data ${s.dataScore}%` : ""})
                     </span>
                   </div>
                   <button

@@ -42,6 +42,7 @@ Kunci penghubung: **`Tag_link1` Shopee ↔ nama kampanye Meta**, dipetakan manua
 - `src/lib/csv-parser.ts` — parsing 3 jenis CSV → interface baris. Mapping header **persis** (termasuk typo asli & varian kolom).
 - `src/lib/import-service.ts` — logika impor: hash file, buat `ImportBatch`, get-or-create campaign, upsert fakta.
 - `src/lib/utils.ts` — `parseFloatSafe`/`parseIntSafe`/`parseDateSafe` (tahan format id-ID & en-US), `wibToUtc`, `parseTagRaw`, `computeFileHash`, `formatCurrency`.
+- `src/lib/matching-engine.ts` — mesin saran Campaign Hub (murni, tanpa I/O): skor nama + skor pola data harian.
 - `src/app/api/*` — route handler (semua `NextRequest`/`NextResponse`).
 - `src/app/*/page.tsx` — halaman client (`"use client"`), fetch ke `/api`. Semua dibungkus `<DashboardLayout>` (`src/components/dashboard-layout.tsx` → `Sidebar` + `ToastContainer`).
 
@@ -77,7 +78,12 @@ Header CSV Shopee asli mengandung typo yang **harus dicocokkan persis**: `Nama B
 
 ## Campaign Hub — matching engine
 
-`src/app/api/campaign-hub/route.ts` (`action: "suggest"`) memberi **saran** koneksi (bukan otomatis-terapkan). Berbasis: filter brand prefix (`META_BRAND_PREFIXES` / `BRAND_MAP`), keyword semantik + sinonim produk (`PRODUCT_SYNONYMS`, hardcode bahasa Indonesia), substring, dan char-n-gram. Threshold skor > 0.3. Peta brand/sinonim ini spesifik-domain dan diperluas seiring data baru — tambah entri di sana saat ketemu pasangan yang tak tercocokkan.
+Logika di `src/lib/matching-engine.ts` (murni, tanpa I/O), dipakai `src/app/api/campaign-hub/route.ts` (`action: "suggest"`) — memberi **saran** koneksi (bukan otomatis-terapkan). Dua sinyal:
+
+1. **Nama**: filter brand prefix (`META_BRAND_PREFIXES` / `BRAND_MAP`), keyword semantik + sinonim produk (`PRODUCT_SYNONYMS`, hardcode bahasa Indonesia), substring, dan char-n-gram. Peta brand/sinonim ini spesifik-domain dan diperluas seiring data baru — tambah entri di sana saat ketemu pasangan yang tak tercocokkan.
+2. **Pola data harian** (`dataMatchScore`): ko-aktivitas spend Meta vs pesanan Shopee per tanggal klik (dari `ShopeeOrderItem`, exclude Dibatalkan) — kedekatan tanggal-mulai, cover hari-aktif, dan konsentrasi pesanan di jendela iklan. Hasil kalibrasi: fitur-fitur ini diskriminatif; **korelasi Pearson bentuk-kurva harian TIDAK** (jangan dipakai; data `ShopeeClick` juga cuma beberapa hari). Skor data hanya *menyesuaikan* skor nama (boost diskalakan keyakinan nama — kampanye sering diluncurkan serentak, pola harian saja ambigu), dan bisa menembus filter brand bila kuat (tag dipakai lintas-brand).
+
+Threshold skor > 0.3. Respons `suggest` menyertakan `nameScore`/`dataScore` (0–100; `dataScore: null` = data pesanan tidak cukup) yang ditampilkan di UI.
 
 ## Catatan penting
 
