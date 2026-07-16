@@ -53,6 +53,11 @@ interface OrganicStats {
   totalKomisi: number;
 }
 
+interface AccountOption {
+  id: number;
+  name: string;
+}
+
 interface DailyDataPoint {
   date: string;
   komisi: number;
@@ -79,6 +84,11 @@ export default function DashboardPage() {
   // dari dropdown → baru reload data (exact match satu kampanye/tag).
   // campaignInput & tagInput saling eksklusif — mengisi satu menonaktifkan
   // yang lain (dua sisi dari tautan hub yang sama).
+  // Filter akun (exact by id, dari master di /api/accounts — dimuat sekali)
+  const [metaAccountFilter, setMetaAccountFilter] = useState("");
+  const [shopeeAccountFilter, setShopeeAccountFilter] = useState("");
+  const [metaAccounts, setMetaAccounts] = useState<AccountOption[]>([]);
+  const [shopeeAccounts, setShopeeAccounts] = useState<AccountOption[]>([]);
   const [campaignInput, setCampaignInput] = useState("");
   const [campaignFilter, setCampaignFilter] = useState("");
   const [campaignOptions, setCampaignOptions] = useState<string[]>([]);
@@ -108,6 +118,8 @@ export default function DashboardPage() {
       const params = new URLSearchParams();
       if (fromDate) params.set("from", fromDate);
       if (toDate) params.set("to", toDate);
+      if (metaAccountFilter) params.set("metaAdAccountId", metaAccountFilter);
+      if (shopeeAccountFilter) params.set("shopeeAccountId", shopeeAccountFilter);
       if (campaignFilter.trim()) params.set("campaign", campaignFilter.trim());
       if (tagFilter.trim()) params.set("tag", tagFilter.trim());
       if (regionFilter) params.set("region", regionFilter);
@@ -139,11 +151,22 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, campaignFilter, tagFilter, regionFilter, statusFilter, l1Filter, l3Filter, platformFilter]);
+  }, [fromDate, toDate, metaAccountFilter, shopeeAccountFilter, campaignFilter, tagFilter, regionFilter, statusFilter, l1Filter, l3Filter, platformFilter]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Master akun untuk dropdown filter — dimuat sekali saat halaman dibuka
+  useEffect(() => {
+    fetch("/api/accounts")
+      .then((res) => res.json())
+      .then((data) => {
+        setMetaAccounts(data.metaAdAccounts || []);
+        setShopeeAccounts(data.shopeeAccounts || []);
+      })
+      .catch(console.error);
+  }, []);
 
   // Debounce input L3 kategori 400ms
   useEffect(() => {
@@ -214,6 +237,32 @@ export default function DashboardPage() {
 
         {/* Filter opsional */}
         <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={metaAccountFilter}
+            onChange={(e) => setMetaAccountFilter(e.target.value)}
+            className="px-3 py-1.5 border rounded-md text-sm bg-white max-w-48"
+            title="Saring pasangan hub berdasarkan akun Meta Ads pemilik kampanye"
+          >
+            <option value="">Semua akun Meta Ads</option>
+            {metaAccounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={shopeeAccountFilter}
+            onChange={(e) => setShopeeAccountFilter(e.target.value)}
+            className="px-3 py-1.5 border rounded-md text-sm bg-white max-w-48"
+            title="Saring pasangan hub & data organik berdasarkan akun Shopee Affiliate"
+          >
+            <option value="">Semua akun Shopee</option>
+            {shopeeAccounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
           <FilterCombobox
             value={campaignInput}
             options={campaignOptions}
@@ -309,9 +358,11 @@ export default function DashboardPage() {
               </option>
             ))}
           </select>
-          {(campaignInput || tagInput || regionFilter || statusFilter || l1Filter || l3Input || platformFilter) && (
+          {(metaAccountFilter || shopeeAccountFilter || campaignInput || tagInput || regionFilter || statusFilter || l1Filter || l3Input || platformFilter) && (
             <button
               onClick={() => {
+                setMetaAccountFilter("");
+                setShopeeAccountFilter("");
                 setCampaignInput("");
                 setCampaignFilter("");
                 setTagInput("");
@@ -333,6 +384,12 @@ export default function DashboardPage() {
               ± Komisi/pesanan/klik Shopee = <b>estimasi prorata</b> porsi spend
               wilayah per kampanye per tanggal (data Shopee tidak punya dimensi
               wilayah).
+            </span>
+          )}
+          {metaAccountFilter && (
+            <span className="text-xs text-muted-foreground">
+              ℹ️ Filter akun Meta hanya menyaring pasangan hub — panel Organik /
+              Unmapped tidak ikut tersaring (data organik tak punya sisi Meta).
             </span>
           )}
           {(statusFilter || l1Filter || l3Filter || platformFilter) && (

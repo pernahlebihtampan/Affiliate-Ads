@@ -34,6 +34,12 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const fromDate = url.searchParams.get("from");
   const toDate = url.searchParams.get("to");
+  const shopeeAccountId = url.searchParams.get("shopeeAccountId")
+    ? parseInt(url.searchParams.get("shopeeAccountId")!)
+    : undefined;
+  const metaAdAccountId = url.searchParams.get("metaAdAccountId")
+    ? parseInt(url.searchParams.get("metaAdAccountId")!)
+    : undefined;
   // Filter opsional — sama dengan /api/dashboard agar grafik konsisten dengan
   // tabel. Saat filter wilayah aktif, komisi Shopee di-PRORATA per (kampanye,
   // tanggal klik) mengikuti porsi spend wilayah (estimasi — data Shopee tidak
@@ -84,6 +90,8 @@ export async function GET(request: NextRequest) {
   });
 
   const hubs = allHubs.filter((h) => {
+    if (metaAdAccountId && h.metaCampaign.metaAdAccountId !== metaAdAccountId) return false;
+    if (shopeeAccountId && h.shopeeCampaign.shopeeAccountId !== shopeeAccountId) return false;
     // Exact match case-insensitive — nilai dikirim UI dari pilihan dropdown
     if (campaignQuery && h.metaCampaign.name.toLowerCase() !== campaignQuery) return false;
     if (tagQuery && h.shopeeCampaign.name.toLowerCase() !== tagQuery) return false;
