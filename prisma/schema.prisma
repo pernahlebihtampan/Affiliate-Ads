@@ -72,6 +72,19 @@ model MetaAdDaily {
   resultIndicator  String   @default("")
   costPerResult    Float    @default(0)
   delivery         String   @default("")
+
+  // New columns from updated Meta CSV (28 columns)
+  region           String   @default("")
+  shopClicks       Int      @default(0)
+  cpc              Float    @default(0)
+  ctr              Float    @default(0)
+  allClicks        Int      @default(0)
+  allCtr           Float    @default(0)
+  allCpc           Float    @default(0)
+  landingPageViews Int      @default(0)
+  costPerLpv       Float    @default(0)
+  cpm              Float    @default(0)
+
   lastImportId     Int?
 
   metaCampaign MetaCampaign @relation(fields: [metaCampaignId], references: [id])
@@ -159,3 +172,4 @@ model Setting {
   key   String @unique
   value String
 }
+

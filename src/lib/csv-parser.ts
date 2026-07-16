@@ -20,6 +20,18 @@ export interface MetaAdRow {
   attribution: string;
   resultsInitial: string;
   resultIndicatorInitial: string;
+  
+  // New columns from updated CSV (28 columns)
+  region: string;
+  shopClicks: number;
+  cpc: number;
+  ctr: number;
+  allClicks: number;
+  allCtr: number;
+  allCpc: number;
+  landingPageViews: number;
+  costPerLpv: number;
+  cpm: number;
 }
 
 export function parseMetaAdCsv(content: string): { rows: MetaAdRow[]; errors: string[] } {
@@ -45,6 +57,10 @@ export function parseMetaAdCsv(content: string): { rows: MetaAdRow[]; errors: st
     if (seen.has(key)) continue;
     seen.add(key);
 
+    // Handle column name variants (old CSV vs new CSV)
+    // Old: "Klik Tautan Unik"  New: "Klik tautan"
+    const uniqueLinkClicksRaw = raw["Klik tautan"] || raw["Klik Tautan Unik"] || "0";
+
     rows.push({
       campaignName: name,
       delivery: raw["Penayangan kampanye"] || "",
@@ -55,7 +71,7 @@ export function parseMetaAdCsv(content: string): { rows: MetaAdRow[]; errors: st
       impressions: parseIntSafe(raw["Impresi"]),
       reach: parseIntSafe(raw["Jangkauan"]),
       frequency: parseFloatSafe(raw["Frekuensi"]),
-      uniqueLinkClicks: parseIntSafe(raw["Klik Tautan Unik"]),
+      uniqueLinkClicks: parseIntSafe(uniqueLinkClicksRaw),
       startDate: raw["Awal pelaporan"] || "",
       endDate: raw["Akhir pelaporan"] || "",
       budget: raw["Anggaran Set Iklan"] || "",
@@ -64,6 +80,18 @@ export function parseMetaAdCsv(content: string): { rows: MetaAdRow[]; errors: st
       attribution: raw["Pengaturan atribusi"] || "",
       resultsInitial: raw["Hasil (awal)"] || "",
       resultIndicatorInitial: raw["Indikator hasil (awal)"] || "",
+      
+      // New columns
+      region: raw["Wilayah"] || "",
+      shopClicks: parseIntSafe(raw["shop_clicks"]),
+      cpc: parseFloatSafe(raw["CPC (biaya per klik tautan) (IDR)"]),
+      ctr: parseFloatSafe(raw["CTR (rasio klik tayang tautan)"]),
+      allClicks: parseIntSafe(raw["Klik (semua)"]),
+      allCtr: parseFloatSafe(raw["CTR (Semua)"]),
+      allCpc: parseFloatSafe(raw["CPC (semua) (IDR)"]),
+      landingPageViews: parseIntSafe(raw["Tayangan halaman tujuan"]),
+      costPerLpv: parseFloatSafe(raw["Biaya per Tayangan Halaman Landas (IDR)"]),
+      cpm: parseFloatSafe(raw["CPM (Biaya Per 1.000 Tayangan) (IDR)"]),
     });
   }
 
@@ -218,14 +246,18 @@ export function parseShopeeCommissionCsv(content: string): { rows: ShopeeCommiss
 // Helper functions for parsing
 function parseIntSafe(value: string): number {
   if (!value || value === "--" || value === "-" || value === "") return 0;
-  let cleaned = value.replace(/[Rp\s]/g, "").replace(/\./g, "");
+  let cleaned = value.replace(/[Rp\s]/g, "").replace(/,.*$/, "").replace(/\./g, "");
   const num = parseInt(cleaned, 10);
   return isNaN(num) ? 0 : num;
 }
 
 function parseFloatSafe(value: string): number {
   if (!value || value === "--" || value === "-" || value === "") return 0;
-  let cleaned = value.replace(/[Rp\s]/g, "").replace(/\./g, "").replace(",", ".");
+  let cleaned = value.replace(/[Rp\s]/g, "");
+  // Handle ID format: 1.234,56 (thousand sep dot, decimal comma)
+  if (cleaned.includes(",")) {
+    cleaned = cleaned.replace(/\./g, "").replace(",", ".");
+  }
   const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
 }

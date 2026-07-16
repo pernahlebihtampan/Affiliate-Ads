@@ -32,10 +32,23 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  try {
   const body = await request.json();
 
   if (body.action === "link") {
     const { metaCampaignId, shopeeCampaignId } = body;
+
+    // Validasi: jika ShopeeCampaign sudah terhubung ke Meta lain, putus dulu
+    const existingHub = await prisma.campaignHub.findUnique({
+      where: { shopeeCampaignId },
+    });
+    if (existingHub && existingHub.metaCampaignId !== metaCampaignId) {
+      // Shopee ini sudah terhubung ke Meta lain — putus yang lama
+      await prisma.campaignHub.delete({
+        where: { metaCampaignId: existingHub.metaCampaignId },
+      });
+    }
+
     const hub = await prisma.campaignHub.upsert({
       where: { metaCampaignId },
       update: { shopeeCampaignId },
@@ -116,4 +129,9 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("CampaignHub POST error:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
