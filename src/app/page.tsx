@@ -74,13 +74,17 @@ export default function DashboardPage() {
     return d.toISOString().split("T")[0];
   });
   const [toDate, setToDate] = useState(() => new Date().toISOString().split("T")[0]);
-  // Filter opsional (campaignInput/tagInput di-debounce → *Filter agar tidak
-  // fetch tiap ketikan). campaignInput & tagInput saling eksklusif — mengisi
-  // satu menonaktifkan yang lain (dua sisi dari tautan hub yang sama).
+  // Filter opsional. campaignInput/tagInput = teks ketikan (hanya membuka
+  // dropdown saran, TIDAK memicu fetch); *Filter di-set saat item dipilih
+  // dari dropdown → baru reload data (exact match satu kampanye/tag).
+  // campaignInput & tagInput saling eksklusif — mengisi satu menonaktifkan
+  // yang lain (dua sisi dari tautan hub yang sama).
   const [campaignInput, setCampaignInput] = useState("");
   const [campaignFilter, setCampaignFilter] = useState("");
+  const [campaignOptions, setCampaignOptions] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [tagFilter, setTagFilter] = useState("");
+  const [tagOptions, setTagOptions] = useState<string[]>([]);
   const [regionFilter, setRegionFilter] = useState("");
   const [regions, setRegions] = useState<string[]>([]);
   // Filter level-item Shopee
@@ -119,6 +123,8 @@ export default function DashboardPage() {
       setTotals(data.totals);
       setOrganic(data.organicStats);
       setRegions(data.regions || []);
+      setCampaignOptions(data.campaignOptions || []);
+      setTagOptions(data.tagOptions || []);
       setStatuses(data.statuses || []);
       setL1Categories(data.l1Categories || []);
       setL3Categories(data.l3Categories || []);
@@ -139,15 +145,7 @@ export default function DashboardPage() {
     fetchData();
   }, [fetchData]);
 
-  // Debounce input nama kampanye & tag Shopee 400ms
-  useEffect(() => {
-    const t = setTimeout(() => setCampaignFilter(campaignInput), 400);
-    return () => clearTimeout(t);
-  }, [campaignInput]);
-  useEffect(() => {
-    const t = setTimeout(() => setTagFilter(tagInput), 400);
-    return () => clearTimeout(t);
-  }, [tagInput]);
+  // Debounce input L3 kategori 400ms
   useEffect(() => {
     const t = setTimeout(() => setL3Filter(l3Input), 400);
     return () => clearTimeout(t);
@@ -216,23 +214,38 @@ export default function DashboardPage() {
 
         {/* Filter opsional */}
         <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="text"
+          <FilterCombobox
             value={campaignInput}
-            onChange={(e) => setCampaignInput(e.target.value)}
+            options={campaignOptions}
+            onChange={(v) => {
+              setCampaignInput(v);
+              // Input dikosongkan → lepas filter & reload semua
+              if (v.trim() === "" && campaignFilter) setCampaignFilter("");
+            }}
+            onSelect={(v) => {
+              setCampaignInput(v);
+              setCampaignFilter(v); // baru di sini data di-reload
+            }}
             disabled={!!tagInput}
             placeholder="Filter nama kampanye Meta…"
             title={tagInput ? "Nonaktif — sedang memfilter Tag Shopee (kedua filter menyaring pasangan hub yang sama)" : undefined}
-            className="px-3 py-1.5 border rounded-md text-sm w-56 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+            widthClass="w-56"
           />
-          <input
-            type="text"
+          <FilterCombobox
             value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)}
+            options={tagOptions}
+            onChange={(v) => {
+              setTagInput(v);
+              if (v.trim() === "" && tagFilter) setTagFilter("");
+            }}
+            onSelect={(v) => {
+              setTagInput(v);
+              setTagFilter(v);
+            }}
             disabled={!!campaignInput}
             placeholder="Filter Tag Shopee…"
             title={campaignInput ? "Nonaktif — sedang memfilter nama kampanye Meta (kedua filter menyaring pasangan hub yang sama)" : undefined}
-            className="px-3 py-1.5 border rounded-md text-sm w-48 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+            widthClass="w-48"
           />
           <select
             value={regionFilter}
@@ -506,6 +519,98 @@ export default function DashboardPage() {
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+// Input filter dengan dropdown saran. Mengetik/paste HANYA membuka list
+// (walau hasil cuma satu; kosong → item "Tidak ditemukan") — data baru
+// di-reload setelah item dipilih (klik / Enter), via onSelect.
+function FilterCombobox({
+  value,
+  options,
+  onChange,
+  onSelect,
+  disabled,
+  placeholder,
+  title,
+  widthClass,
+}: {
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+  onSelect: (v: string) => void;
+  disabled?: boolean;
+  placeholder: string;
+  title?: string;
+  widthClass: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+
+  const q = value.trim().toLowerCase();
+  const matches = q ? options.filter((o) => o.toLowerCase().includes(q)) : options;
+
+  const pick = (v: string) => {
+    onSelect(v);
+    setOpen(false);
+  };
+
+  return (
+    <div className={`relative ${widthClass}`}>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+          setHighlight(0);
+        }}
+        onFocus={() => value.trim() && setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setOpen(false);
+          if (!open || matches.length === 0) return;
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setHighlight((h) => Math.min(h + 1, matches.length - 1));
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setHighlight((h) => Math.max(h - 1, 0));
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            pick(matches[Math.min(highlight, matches.length - 1)]);
+          }
+        }}
+        disabled={disabled}
+        placeholder={placeholder}
+        title={title}
+        className="w-full px-3 py-1.5 border rounded-md text-sm disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+      />
+      {open && !disabled && (
+        <ul className="absolute z-20 top-full left-0 mt-1 min-w-full w-max max-w-md bg-white border rounded-md shadow-lg max-h-64 overflow-y-auto text-sm">
+          {matches.length === 0 ? (
+            <li className="px-3 py-2 text-muted-foreground italic">Tidak ditemukan</li>
+          ) : (
+            matches.map((o, i) => (
+              <li
+                key={o}
+                // onMouseDown (bukan onClick) agar terpicu sebelum blur input menutup list
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pick(o);
+                }}
+                onMouseEnter={() => setHighlight(i)}
+                className={`px-3 py-2 cursor-pointer ${
+                  i === highlight ? "bg-gray-100" : ""
+                }`}
+              >
+                {o}
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </div>
   );
 }
 

@@ -41,15 +41,16 @@ export async function GET(request: NextRequest) {
   const metaAdAccountId = url.searchParams.get("metaAdAccountId")
     ? parseInt(url.searchParams.get("metaAdAccountId")!)
     : undefined;
-  // Filter opsional: substring nama kampanye Meta (case-insensitive) & wilayah Meta.
+  // Filter opsional: nama kampanye Meta EXACT match case-insensitive (nilai
+  // dikirim UI dari pilihan dropdown, bukan ketikan bebas) & wilayah Meta.
   // Data Shopee tidak punya dimensi wilayah (CSV komisi tanpa kolom wilayah;
   // "Wilayah Klik" = negara). Saat filter wilayah aktif, metrik Shopee
   // di-PRORATA per (kampanye, tanggal klik) mengikuti porsi spend wilayah:
   //   komisi_wilayah ≈ komisi × spend_wilayah / spend_total  → ESTIMASI.
   const campaignQuery = url.searchParams.get("campaign")?.trim().toLowerCase() || "";
   const region = url.searchParams.get("region") || "";
-  // Filter sisi Shopee: substring Tag_link1 (eksklusif dengan `campaign` — UI
-  // yang menjaga), plus filter exact level-item pesanan.
+  // Filter sisi Shopee: Tag_link1 exact match (eksklusif dengan `campaign` —
+  // UI yang menjaga), plus filter exact level-item pesanan.
   const tagQuery = url.searchParams.get("tag")?.trim().toLowerCase() || "";
   const statusFilter = url.searchParams.get("status") || "";
   const l1Filter = url.searchParams.get("l1") || "";
@@ -102,12 +103,21 @@ export async function GET(request: NextRequest) {
     },
   });
 
+  // Opsi autocomplete filter kampanye/tag di UI — dari SEMUA hub (sebelum
+  // difilter) supaya list tetap lengkap saat sebuah filter sedang aktif.
+  const campaignOptions = [...new Set(hubs.map((h) => h.metaCampaign.name))].sort(
+    (a, b) => a.localeCompare(b, "id-ID")
+  );
+  const tagOptions = [...new Set(hubs.map((h) => h.shopeeCampaign.name))].sort(
+    (a, b) => a.localeCompare(b, "id-ID")
+  );
+
   // Filter by account / campaign name / tag Shopee if specified
   const filteredHubs = hubs.filter((hub) => {
     if (metaAdAccountId && hub.metaCampaign.metaAdAccountId !== metaAdAccountId) return false;
     if (shopeeAccountId && hub.shopeeCampaign.shopeeAccountId !== shopeeAccountId) return false;
-    if (campaignQuery && !hub.metaCampaign.name.toLowerCase().includes(campaignQuery)) return false;
-    if (tagQuery && !hub.shopeeCampaign.name.toLowerCase().includes(tagQuery)) return false;
+    if (campaignQuery && hub.metaCampaign.name.toLowerCase() !== campaignQuery) return false;
+    if (tagQuery && hub.shopeeCampaign.name.toLowerCase() !== tagQuery) return false;
     return true;
   });
 
@@ -261,7 +271,7 @@ export async function GET(request: NextRequest) {
 
   // estimated: metrik Shopee (komisi/pesanan/klik) adalah hasil prorata wilayah
   return NextResponse.json({
-    rows, totals, organicStats, regions,
+    rows, totals, organicStats, regions, campaignOptions, tagOptions,
     statuses: statusRows.map((r) => r.statusPesanan),
     l1Categories: l1Rows.map((r) => r.l1Kategori),
     l3Categories: l3Rows.map((r) => r.l3Kategori),

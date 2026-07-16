@@ -84,8 +84,9 @@ export async function GET(request: NextRequest) {
   });
 
   const hubs = allHubs.filter((h) => {
-    if (campaignQuery && !h.metaCampaign.name.toLowerCase().includes(campaignQuery)) return false;
-    if (tagQuery && !h.shopeeCampaign.name.toLowerCase().includes(tagQuery)) return false;
+    // Exact match case-insensitive — nilai dikirim UI dari pilihan dropdown
+    if (campaignQuery && h.metaCampaign.name.toLowerCase() !== campaignQuery) return false;
+    if (tagQuery && h.shopeeCampaign.name.toLowerCase() !== tagQuery) return false;
     return true;
   });
 

@@ -27,13 +27,29 @@ interface DailyChartProps {
   data: DailyDataPoint[];
 }
 
+// Seri batang yang saling menimpa di posisi X yang sama. Urutan render
+// ditentukan per-tanggal (terpanjang paling belakang) — lihat chartData.
+const BAR_KEYS = ["profit", "profitSelesai", "komisiDibatalkan"] as const;
+type BarKey = (typeof BAR_KEYS)[number];
+
+function barColors(key: BarKey, value: number): { fill: string; stroke: string } {
+  switch (key) {
+    case "profit":
+      // Batang putih, pinggiran hijau; pinggiran merah bila negatif
+      return { fill: "#FFFFFF", stroke: value < 0 ? "#EF4444" : "#22C55E" };
+    case "profitSelesai": {
+      const c = value < 0 ? "#EF4444" : "#22C55E";
+      return { fill: c, stroke: c };
+    }
+    case "komisiDibatalkan":
+      return { fill: "#9CA3AF", stroke: "#9CA3AF" };
+  }
+}
+
 interface TooltipEntry {
-  name?: string;
-  value?: number;
-  color?: string;
   // Data point asli — sumber tanggal mentah "yyyy-MM-dd" (label sumbu X hanya
-  // "9 Jul" dan tidak bisa diparse jadi Date)
-  payload?: { date?: string };
+  // "9 Jul" dan tidak bisa diparse jadi Date) sekaligus nilai semua seri
+  payload?: DailyDataPoint;
 }
 
 interface CustomTooltipProps {
@@ -44,63 +60,75 @@ interface CustomTooltipProps {
 function CustomTooltip({ active, payload }: CustomTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
 
-  const rawDate = payload[0]?.payload?.date;
+  const dp = payload[0]?.payload;
+  if (!dp) return null;
+
+  // Dibangun dari data point mentah (bukan entri seri Recharts) karena seri
+  // batang kini berupa lapisan generik layer1..3 yang namanya tidak informatif
+  const entries = [
+    { name: "Komisi", value: dp.komisi, color: "#3B82F6" },
+    { name: "Pengeluaran (Spend)", value: dp.spend, color: "#EAB308" },
+    { name: "Keuntungan (Komisi - Spend)", value: dp.profit, color: "#FFFFFF" },
+    {
+      name: "Keuntungan Selesai (Komisi Selesai - Spend)",
+      value: dp.profitSelesai,
+      color: "#22C55E",
+    },
+    { name: "Komisi Dibatalkan (estimasi)", value: dp.komisiDibatalkan, color: "#9CA3AF" },
+  ];
 
   return (
     <div className="bg-white rounded-lg border shadow-lg p-3 text-sm">
       <p className="font-medium mb-2 text-gray-700">
-        {rawDate
-          ? new Date(rawDate + "T00:00:00").toLocaleDateString("id-ID", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })
-          : ""}
+        {new Date(dp.date + "T00:00:00").toLocaleDateString("id-ID", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })}
       </p>
-      {payload.map((entry) => {
+      {entries.map((entry) => {
         // Seri hijau (profit Selesai) dirender merah saat nilainya negatif —
         // samakan warna swatch tooltip dengan warna batangnya
         const swatchColor =
-          entry.color === "#22C55E" && (entry.value ?? 0) < 0
-            ? "#EF4444"
-            : entry.color;
+          entry.color === "#22C55E" && entry.value < 0 ? "#EF4444" : entry.color;
         return (
-        <div key={entry.name} className="flex items-center gap-2 py-0.5">
-          <span
-            className="w-3 h-3 rounded-full inline-block"
-            style={{
-              backgroundColor: swatchColor,
-              // Swatch putih tak terlihat di latar putih — beri pinggiran
-              // sewarna stroke batangnya (merah bila negatif)
-              border:
-                swatchColor?.toUpperCase() === "#FFFFFF"
-                  ? `1.5px solid ${(entry.value ?? 0) < 0 ? "#EF4444" : "#22C55E"}`
-                  : undefined,
-            }}
-          />
-          <span className="text-gray-600">{entry.name}:</span>
-          <span className="font-semibold ml-auto">
-            {formatCurrency(entry.value ?? 0)}
-          </span>
-        </div>
+          <div key={entry.name} className="flex items-center gap-2 py-0.5">
+            <span
+              className="w-3 h-3 rounded-full inline-block"
+              style={{
+                backgroundColor: swatchColor,
+                // Swatch putih tak terlihat di latar putih — beri pinggiran
+                // sewarna stroke batangnya (merah bila negatif)
+                border:
+                  swatchColor === "#FFFFFF"
+                    ? `1.5px solid ${entry.value < 0 ? "#EF4444" : "#22C55E"}`
+                    : undefined,
+              }}
+            />
+            <span className="text-gray-600">{entry.name}:</span>
+            <span className="font-semibold ml-auto">
+              {formatCurrency(entry.value)}
+            </span>
+          </div>
         );
       })}
     </div>
   );
 }
 
-interface LegendEntry {
-  value?: string;
-  color?: string;
-}
+const LEGEND_ITEMS = [
+  { value: "Komisi", color: "#3B82F6" },
+  { value: "Pengeluaran (Spend)", color: "#EAB308" },
+  { value: "Keuntungan (Komisi - Spend)", color: "#FFFFFF" },
+  { value: "Keuntungan Selesai (Komisi Selesai - Spend)", color: "#22C55E" },
+  { value: "Komisi Dibatalkan (estimasi)", color: "#9CA3AF" },
+];
 
-function CustomLegend({ payload }: { payload?: LegendEntry[] }) {
-  if (!payload || payload.length === 0) return null;
-
+function CustomLegend() {
   return (
     <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 pb-3">
-      {payload.map((entry) => (
+      {LEGEND_ITEMS.map((entry) => (
         <span
           key={entry.value}
           className="flex items-center gap-1.5 text-sm text-gray-600"
@@ -110,9 +138,7 @@ function CustomLegend({ payload }: { payload?: LegendEntry[] }) {
             style={{
               backgroundColor: entry.color,
               border:
-                entry.color?.toUpperCase() === "#FFFFFF"
-                  ? "1.5px solid #22C55E"
-                  : undefined,
+                entry.color === "#FFFFFF" ? "1.5px solid #22C55E" : undefined,
             }}
           />
           {entry.value}
@@ -131,14 +157,26 @@ export function DailyChart({ data }: DailyChartProps) {
     );
   }
 
-  // Format tanggal untuk ditampilkan di sumbu X
-  const chartData = data.map((d) => ({
-    ...d,
-    dateLabel: new Date(d.date + "T00:00:00").toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "short",
-    }),
-  }));
+  // Format tanggal untuk sumbu X + urutkan lapisan batang per-tanggal:
+  // batang terpanjang dari nol (nilai absolut terbesar) digambar paling
+  // belakang (layer1), terpendek paling depan (layer3), supaya semua batang
+  // di tanggal yang sama tetap terlihat
+  const chartData = data.map((d) => {
+    const order = [...BAR_KEYS].sort(
+      (a, b) => Math.abs(d[b]) - Math.abs(d[a])
+    );
+    return {
+      ...d,
+      dateLabel: new Date(d.date + "T00:00:00").toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "short",
+      }),
+      layer1: d[order[0]],
+      layer2: d[order[1]],
+      layer3: d[order[2]],
+      layerKeys: order,
+    };
+  });
 
   // Tentukan batas bawah untuk sumbu Y agar grafik tidak terpotong
   const allValues = data.flatMap((d) => [
@@ -168,7 +206,7 @@ export function DailyChart({ data }: DailyChartProps) {
             axisLine={{ stroke: "#e5e7eb" }}
           />
           {/* Axis tersembunyi agar bar overlay menimpa (bukan berdampingan) —
-              satu axis per seri bar, urutan render menentukan tumpukan */}
+              satu axis per lapisan bar, urutan render menentukan tumpukan */}
           <XAxis dataKey="dateLabel" xAxisId="overlay" hide />
           <XAxis dataKey="dateLabel" xAxisId="overlay2" hide />
           <YAxis
@@ -206,54 +244,29 @@ export function DailyChart({ data }: DailyChartProps) {
             dot={{ r: 3, fill: "#EAB308", strokeWidth: 0 }}
             activeDot={{ r: 5, fill: "#EAB308", strokeWidth: 2, stroke: "#fff" }}
           />
-          {/* Grafik profit total (batang putih, pinggiran hijau;
-              pinggiran merah bila nilainya negatif) */}
-          <Bar
-            dataKey="profit"
-            name="Keuntungan (Komisi - Spend)"
-            fill="#FFFFFF"
-            stroke="#22C55E"
-            strokeWidth={1.5}
-            radius={[3, 3, 0, 0]}
-          >
-            {chartData.map((d) => (
-              <Cell
-                key={d.date}
-                fill="#FFFFFF"
-                stroke={d.profit < 0 ? "#EF4444" : "#22C55E"}
-              />
-            ))}
-          </Bar>
-          {/* Grafik profit order Selesai (batang hijau, menimpa batang profit;
-              merah bila nilainya negatif) */}
-          <Bar
-            dataKey="profitSelesai"
-            name="Keuntungan Selesai (Komisi Selesai - Spend)"
-            xAxisId="overlay"
-            fill="#22C55E"
-            stroke="#22C55E"
-            strokeWidth={1.5}
-            radius={[3, 3, 0, 0]}
-          >
-            {chartData.map((d) => (
-              <Cell
-                key={d.date}
-                fill={d.profitSelesai < 0 ? "#EF4444" : "#22C55E"}
-                stroke={d.profitSelesai < 0 ? "#EF4444" : "#22C55E"}
-              />
-            ))}
-          </Bar>
-          {/* Estimasi komisi pesanan Dibatalkan (batang abu-abu, lapisan
-              teratas): hargaRp × (pctShopee + pctXtra) / 100 */}
-          <Bar
-            dataKey="komisiDibatalkan"
-            name="Komisi Dibatalkan (estimasi)"
-            xAxisId="overlay2"
-            fill="#9CA3AF"
-            stroke="#9CA3AF"
-            strokeWidth={1.5}
-            radius={[3, 3, 0, 0]}
-          />
+          {/* Tiga lapisan batang generik — tiap tanggal, seri asli
+              (profit / profitSelesai / komisiDibatalkan) dipetakan ke lapisan
+              sesuai panjang batangnya; warna per-sel mengikuti seri aslinya */}
+          {([
+            { dataKey: "layer1", xAxisId: undefined, layerIdx: 0 },
+            { dataKey: "layer2", xAxisId: "overlay", layerIdx: 1 },
+            { dataKey: "layer3", xAxisId: "overlay2", layerIdx: 2 },
+          ] as const).map(({ dataKey, xAxisId, layerIdx }) => (
+            <Bar
+              key={dataKey}
+              dataKey={dataKey}
+              xAxisId={xAxisId}
+              strokeWidth={1.5}
+              radius={[3, 3, 0, 0]}
+              legendType="none"
+            >
+              {chartData.map((d) => {
+                const seriesKey = d.layerKeys[layerIdx];
+                const { fill, stroke } = barColors(seriesKey, d[seriesKey]);
+                return <Cell key={d.date} fill={fill} stroke={stroke} />;
+              })}
+            </Bar>
+          ))}
         </ComposedChart>
       </ResponsiveContainer>
     </div>
