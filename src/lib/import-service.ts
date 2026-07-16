@@ -1,9 +1,8 @@
 import { prisma } from "./prisma";
-import { computeFileHash, parseTagRaw, parseDateSafe, wibToUtc } from "./utils";
+import { computeFileHash, parseTagRaw, parseDateWib } from "./utils";
 import type { MetaAdRow, ShopeeClickRow, ShopeeCommissionRow } from "./csv-parser";
 
 const BATCH_SIZE = 500;
-const BATCH_LOG_INTERVAL = 2000;
 
 export interface ImportResult {
   inserted: number;
@@ -51,9 +50,9 @@ export async function importMetaAdCsv(
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const startDate = parseDateSafe(row.startDate);
+    // Tanggal Meta (WIB) disimpan sebagai 00:00Z tanggal kalender → bucket harian = tanggal WIB.
+    const startDate = parseDateWib(row.startDate);
     if (!startDate) { result.skipped++; continue; }
-    startDate.setHours(0, 0, 0, 0);
 
     let campaign = campaignMap.get(row.campaignName);
     if (!campaign) {
@@ -126,7 +125,7 @@ export async function importShopeeClickCsv(
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const { tag1, tag2 } = parseTagRaw(row.tagRaw);
-    const clickTime = parseDateSafe(row.waktuKlik);
+    const clickTime = parseDateWib(row.waktuKlik);
 
     let campaignId: number | null = null;
     if (tag1) {
@@ -147,7 +146,7 @@ export async function importShopeeClickCsv(
       await prisma.shopeeClick.create({
         data: {
           klikId: row.klikId, shopeeAccountId, waktuKlik: row.waktuKlik,
-          clickTimeUTC: clickTime ? wibToUtc(clickTime) : null,
+          clickTimeUTC: clickTime,
           wilayah: row.wilayah, tagRaw: row.tagRaw, tag1, tag2,
           shopeeCampaignId: campaignId, perujuk: row.perujuk,
           lastImportId: importBatch.id,
@@ -205,9 +204,9 @@ export async function importShopeeCommissionCsv(
       }
     }
 
-    const clickTime = parseDateSafe(row.waktuKlik);
-    const orderTime = parseDateSafe(row.waktuPemesanan);
-    const completeTime = parseDateSafe(row.waktuTerselesaikan);
+    const clickTime = parseDateWib(row.waktuKlik);
+    const orderTime = parseDateWib(row.waktuPemesanan);
+    const completeTime = parseDateWib(row.waktuTerselesaikan);
 
     const pk = { idPemesanan: row.idPemesanan, idBarang: row.idBarang, idModel: row.idModel, idPromosi: row.idPromosi };
 
@@ -229,9 +228,9 @@ export async function importShopeeCommissionCsv(
       tipePesanan: row.tipePesanan, statusPembelian: row.statusPembelian,
       tag1: row.tag1, tag2: row.tag2, tag3: row.tag3, tag4: row.tag4, tag5: row.tag5,
       platform: row.platform, shopeeCampaignId: campaignId,
-      clickTimeUTC: clickTime ? wibToUtc(clickTime) : null,
-      orderTimeUTC: orderTime ? wibToUtc(orderTime) : null,
-      completeTimeUTC: completeTime ? wibToUtc(completeTime) : null,
+      clickTimeUTC: clickTime,
+      orderTimeUTC: orderTime,
+      completeTimeUTC: completeTime,
       lastImportId: importBatch.id,
     };
 

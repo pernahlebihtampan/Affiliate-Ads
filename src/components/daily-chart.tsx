@@ -24,7 +24,19 @@ interface DailyChartProps {
   data: DailyDataPoint[];
 }
 
-function CustomTooltip({ active, payload, label }: any) {
+interface TooltipEntry {
+  name?: string;
+  value?: number;
+  color?: string;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: TooltipEntry[];
+  label?: string;
+}
+
+function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
 
   return (
@@ -37,7 +49,7 @@ function CustomTooltip({ active, payload, label }: any) {
           day: "numeric",
         })}
       </p>
-      {payload.map((entry: any) => (
+      {payload.map((entry) => (
         <div key={entry.name} className="flex items-center gap-2 py-0.5">
           <span
             className="w-3 h-3 rounded-full inline-block"
@@ -45,7 +57,7 @@ function CustomTooltip({ active, payload, label }: any) {
           />
           <span className="text-gray-600">{entry.name}:</span>
           <span className="font-semibold ml-auto">
-            {formatCurrency(entry.value)}
+            {formatCurrency(entry.value ?? 0)}
           </span>
         </div>
       ))}

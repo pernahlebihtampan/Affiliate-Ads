@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { formatCurrency, formatNumber } from "@/lib/utils";
@@ -47,17 +48,17 @@ export default function CampaignDetailPage() {
   const [data, setData] = useState<CampaignDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchData();
-  }, [id]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     const res = await fetch(`/api/campaigns?id=${id}&type=meta`);
     const d = await res.json();
     setData(d);
     setLoading(false);
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   if (loading) {
     return (
@@ -90,9 +91,9 @@ export default function CampaignDetailPage() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <a href="/" className="text-sm text-primary hover:underline">
+          <Link href="/" className="text-sm text-primary hover:underline">
             ← Dashboard
-          </a>
+          </Link>
           <h1 className="text-2xl font-bold mt-1">{campaign.name}</h1>
           <p className="text-sm text-muted-foreground">
             {campaign.metaAdAccount.name} · Status: {campaign.status}

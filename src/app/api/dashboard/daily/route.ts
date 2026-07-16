@@ -12,10 +12,31 @@ function parseDateUtcEndOfDay(dateStr: string): Date {
   return new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
 }
 
+// Gabung gte/lte jadi SATU objek filter — dua spread dengan key sama saling menimpa
+// sehingga batas bawah rentang (from) hilang.
+function dateRange(fromDate: string | null, toDate: string | null) {
+  if (!fromDate && !toDate) return undefined;
+  return {
+    ...(fromDate ? { gte: parseDateUtc(fromDate) } : {}),
+    ...(toDate ? { lte: parseDateUtc(toDate) } : {}),
+  };
+}
+
+function clickRange(fromDate: string | null, toDate: string | null) {
+  if (!fromDate && !toDate) return undefined;
+  return {
+    ...(fromDate ? { gte: parseDateUtc(fromDate) } : {}),
+    ...(toDate ? { lte: parseDateUtcEndOfDay(toDate) } : {}),
+  };
+}
+
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const fromDate = url.searchParams.get("from");
   const toDate = url.searchParams.get("to");
+
+  const dateFilter = dateRange(fromDate, toDate);
+  const clickFilter = clickRange(fromDate, toDate);
 
   // Dapatkan semua campaign hubs yang ter-mapping
   const hubs = await prisma.campaignHub.findMany({
@@ -24,8 +45,7 @@ export async function GET(request: NextRequest) {
         include: {
           dailyStats: {
             where: {
-              ...(fromDate ? { date: { gte: parseDateUtc(fromDate) } } : {}),
-              ...(toDate ? { date: { lte: parseDateUtc(toDate) } } : {}),
+              ...(dateFilter ? { date: dateFilter } : {}),
             },
           },
         },
@@ -35,12 +55,7 @@ export async function GET(request: NextRequest) {
           orderItems: {
             where: {
               statusPesanan: { not: "Dibatalkan" },
-              ...(fromDate
-                ? { clickTimeUTC: { gte: parseDateUtc(fromDate) } }
-                : {}),
-              ...(toDate
-                ? { clickTimeUTC: { lte: parseDateUtcEndOfDay(toDate) } }
-                : {}),
+              ...(clickFilter ? { clickTimeUTC: clickFilter } : {}),
             },
           },
         },

@@ -68,7 +68,8 @@ async function getShopeeCampaignDetail(campaignId: number) {
   const hourBuckets: Record<number, number> = {};
   for (const click of clicks) {
     if (click.clickTimeUTC) {
-      const hour = click.clickTimeUTC.getHours();
+      // clickTimeUTC menyimpan WIB-as-UTC → getUTCHours() = jam WIB (bukan jam server WITA).
+      const hour = click.clickTimeUTC.getUTCHours();
       hourBuckets[hour] = (hourBuckets[hour] || 0) + 1;
     }
   }

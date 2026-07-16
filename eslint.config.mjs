@@ -12,7 +12,18 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Prisma client di-generate, bukan kode tangan:
+    "src/generated/**",
   ]),
+  {
+    rules: {
+      // App ini client-side (single-user, lokal): pola "fetch-on-mount lalu setState"
+      // dipakai konsisten di semua halaman. Rule ini menandainya sebagai error (bahkan
+      // untuk setState setelah await); turunkan ke warning agar tetap terlihat tanpa
+      // memblokir lint. Ganti ke server component / data library kalau app tumbuh besar.
+      "react-hooks/set-state-in-effect": "warn",
+    },
+  },
 ]);
 
 export default eslintConfig;

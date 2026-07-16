@@ -14,8 +14,8 @@ export function ToastContainer() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   useEffect(() => {
-    const handler = (e: CustomEvent) => {
-      const toast = e.detail as Toast;
+    const handler = (e: CustomEvent<Toast>) => {
+      const toast = e.detail;
       const id = String(Date.now());
       setToasts((prev) => [...prev, { ...toast, id }]);
       setTimeout(() => {
@@ -23,8 +23,8 @@ export function ToastContainer() {
       }, 5000);
     };
 
-    window.addEventListener("toast" as any, handler as any);
-    return () => window.removeEventListener("toast" as any, handler as any);
+    window.addEventListener("toast", handler as EventListener);
+    return () => window.removeEventListener("toast", handler as EventListener);
   }, []);
 
   const dismiss = (id: string) => {

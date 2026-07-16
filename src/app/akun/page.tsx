@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { showToast } from "@/components/toast-container";
 
@@ -28,16 +28,16 @@ export default function AkunPage() {
   const [editingMetaId, setEditingMetaId] = useState<number | null>(null);
   const [editingMetaName, setEditingMetaName] = useState("");
 
-  useEffect(() => {
-    fetchAccounts();
-  }, []);
-
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     const res = await fetch("/api/accounts");
     const data = await res.json();
     setShopeeAccounts(data.shopeeAccounts || []);
     setMetaAccounts(data.metaAdAccounts || []);
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchAccounts();
+  }, [fetchAccounts]);
 
   const addShopeeAccount = async () => {
     if (!newShopeeName.trim()) return;

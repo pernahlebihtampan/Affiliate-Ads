@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { showToast } from "@/components/toast-container";
 
@@ -261,16 +261,16 @@ export default function CampaignHubPage() {
   const [filterShopee, setFilterShopee] = useState("");
 
   // Simpan & restore scroll position agar tidak lompat ke atas saat refresh
-  const saveScroll = () => tableRef.current?.scrollTop || 0;
-  const restoreScroll = (top: number) => {
+  const saveScroll = useCallback(() => tableRef.current?.scrollTop || 0, []);
+  const restoreScroll = useCallback((top: number) => {
     requestAnimationFrame(() => {
       if (tableRef.current) {
         tableRef.current.scrollTop = top;
       }
     });
-  };
+  }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     const prevScroll = saveScroll();
     try {
       const res = await fetch("/api/campaign-hub");
@@ -282,7 +282,7 @@ export default function CampaignHubPage() {
       showToast("Gagal memuat data", String(e), "destructive");
     }
     restoreScroll(prevScroll);
-  };
+  }, [saveScroll, restoreScroll]);
 
   // Initial load
   useEffect(() => {
@@ -291,7 +291,7 @@ export default function CampaignHubPage() {
       await fetchData();
       setLoading(false);
     })();
-  }, []);
+  }, [fetchData]);
 
   const fetchSuggestions = async () => {
     try {
@@ -356,17 +356,6 @@ export default function CampaignHubPage() {
       await fetchData();
     } catch (e) {
       showToast("Gagal memutus", String(e), "destructive");
-    }
-  };
-
-  const handleQuickLink = (metaId: number) => {
-    setSelectedMetaId(metaId);
-    setSelectedShopeeId(null);
-    const el = document.getElementById("manual-link-section");
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add("ring-2", "ring-blue-400");
-      setTimeout(() => el.classList.remove("ring-2", "ring-blue-400"), 2000);
     }
   };
 

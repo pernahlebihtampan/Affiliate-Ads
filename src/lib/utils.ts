@@ -18,27 +18,40 @@ export function formatNumber(value: number): string {
   return new Intl.NumberFormat("id-ID").format(value);
 }
 
-export function parseDateSafe(value: string): Date | null {
+/**
+ * Parse waktu Shopee/Meta (WIB, UTC+7) menjadi Date yang instannya = digit apa adanya.
+ *
+ * Dibangun via Date.UTC(...) sehingga `.toISOString()` mengembalikan digit yang sama
+ * dengan string mentah (mis. "2026-07-14 15:50" -> 2026-07-14T15:50:00Z). Artinya
+ * tanggal-kalender bisnis (WIB) dibaca langsung dari bagian tanggal ISO — konsisten
+ * dengan cara MetaAdDaily.date disimpan (00:00Z dari label tanggal WIB), sehingga
+ * spend Meta & komisi Shopee jatuh di bucket tanggal WIB yang SAMA (selisih 0 jam).
+ *
+ * JANGAN pakai `new Date("...")` tanpa offset lalu geser jam — itu bergantung timezone
+ * server (WITA/+8) dan menghasilkan konversi ganda (bug lama: clickTimeUTC meleset -8 jam).
+ */
+export function parseDateWib(value: string): Date | null {
   if (!value || value === "--" || value === "-") return null;
 
-  // Try yyyy-MM-dd HH:mm:ss format (new Shopee format)
+  // yyyy-MM-dd HH:mm:ss (format Shopee baru)
   const ymdhms = /^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2}):(\d{2})$/.exec(value);
   if (ymdhms) {
     const [, y, m, d, h, min, s] = ymdhms;
-    return new Date(`${y}-${m}-${d}T${h.padStart(2, "0")}:${min}:${s}`);
+    return new Date(Date.UTC(+y, +m - 1, +d, +h, +min, +s));
   }
 
-  // Try M/d/yyyy H:mm format (old Shopee format)
+  // M/d/yyyy H:mm (format Shopee lama)
   const mdy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})$/.exec(value);
   if (mdy) {
     const [, m, d, y, h, min] = mdy;
-    return new Date(`${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}T${h.padStart(2, "0")}:${min}:00`);
+    return new Date(Date.UTC(+y, +m - 1, +d, +h, +min, 0));
   }
 
-  // Try yyyy-MM-dd
+  // yyyy-MM-dd (tanggal saja, mis. Meta "Awal pelaporan")
   const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (ymd) {
-    return new Date(`${value}T00:00:00`);
+    const [, y, m, d] = ymd;
+    return new Date(Date.UTC(+y, +m - 1, +d, 0, 0, 0));
   }
 
   return null;
@@ -66,7 +79,7 @@ export function parseFloatSafe(value: string): number {
 
 export function parseIntSafe(value: string): number {
   if (!value || value === "--" || value === "-" || value === "") return 0;
-  let cleaned = value.replace(/[Rp\s]/g, "").replace(/,.*$/, "").replace(/\./g, "");
+  const cleaned = value.replace(/[Rp\s]/g, "").replace(/,.*$/, "").replace(/\./g, "");
   const num = parseInt(cleaned, 10);
   return isNaN(num) ? 0 : num;
 }
@@ -77,12 +90,6 @@ export function parseTagRaw(tagRaw: string): { tag1: string; tag2: string } {
   const tag1 = parts[0] || "";
   const tag2 = parts.length > 1 ? parts[1] : "";
   return { tag1, tag2 };
-}
-
-export function wibToUtc(date: Date): Date {
-  const utc = new Date(date);
-  utc.setHours(utc.getHours() - 7);
-  return utc;
 }
 
 export function computeFileHash(content: string): string {

@@ -42,8 +42,12 @@ export function parseMetaAdCsv(content: string): { rows: MetaAdRow[]; errors: st
   });
 
   const errors: string[] = [];
-  const rows: MetaAdRow[] = [];
-  const seen = new Set<string>();
+
+  // CSV Meta versi baru dipecah per-Wilayah: ada ~34 baris (satu per provinsi) untuk
+  // tiap (kampanye, tanggal). Jangan dedup ambil-satu-wilayah (dulu membuang ~98% spend);
+  // AGREGASIKAN dengan menjumlahkan metrik dasar per (kampanye|tanggal), lalu hitung
+  // ulang rasio (cpc/ctr/cpm/frequency) dari hasil penjumlahan.
+  const agg = new Map<string, MetaAdRow>();
 
   for (let i = 0; i < result.data.length; i++) {
     const raw = result.data[i] as Record<string, string>;
@@ -53,46 +57,80 @@ export function parseMetaAdCsv(content: string): { rows: MetaAdRow[]; errors: st
     }
 
     const name = raw["Nama kampanye"] || "";
-    const key = `${name}|${raw["Awal pelaporan"] || ""}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const startDate = raw["Awal pelaporan"] || "";
+    const key = `${name}|${startDate}`;
 
     // Handle column name variants (old CSV vs new CSV)
     // Old: "Klik Tautan Unik"  New: "Klik tautan"
     const uniqueLinkClicksRaw = raw["Klik tautan"] || raw["Klik Tautan Unik"] || "0";
 
-    rows.push({
-      campaignName: name,
-      delivery: raw["Penayangan kampanye"] || "",
-      results: parseIntSafe(raw["Hasil"]),
-      resultIndicator: raw["Indikator Hasil"] || "",
-      costPerResult: parseFloatSafe(raw["Biaya per Hasil"]),
-      spend: parseFloatSafe(raw["Jumlah yang dibelanjakan (IDR)"]),
-      impressions: parseIntSafe(raw["Impresi"]),
-      reach: parseIntSafe(raw["Jangkauan"]),
-      frequency: parseFloatSafe(raw["Frekuensi"]),
-      uniqueLinkClicks: parseIntSafe(uniqueLinkClicksRaw),
-      startDate: raw["Awal pelaporan"] || "",
-      endDate: raw["Akhir pelaporan"] || "",
-      budget: raw["Anggaran Set Iklan"] || "",
-      budgetType: raw["Jenis Anggaran Set Iklan"] || "",
-      ends: raw["Berakhir"] || "",
-      attribution: raw["Pengaturan atribusi"] || "",
-      resultsInitial: raw["Hasil (awal)"] || "",
-      resultIndicatorInitial: raw["Indikator hasil (awal)"] || "",
-      
-      // New columns
-      region: raw["Wilayah"] || "",
-      shopClicks: parseIntSafe(raw["shop_clicks"]),
-      cpc: parseFloatSafe(raw["CPC (biaya per klik tautan) (IDR)"]),
-      ctr: parseFloatSafe(raw["CTR (rasio klik tayang tautan)"]),
-      allClicks: parseIntSafe(raw["Klik (semua)"]),
-      allCtr: parseFloatSafe(raw["CTR (Semua)"]),
-      allCpc: parseFloatSafe(raw["CPC (semua) (IDR)"]),
-      landingPageViews: parseIntSafe(raw["Tayangan halaman tujuan"]),
-      costPerLpv: parseFloatSafe(raw["Biaya per Tayangan Halaman Landas (IDR)"]),
-      cpm: parseFloatSafe(raw["CPM (Biaya Per 1.000 Tayangan) (IDR)"]),
-    });
+    const spend = parseFloatSafe(raw["Jumlah yang dibelanjakan (IDR)"]);
+    const impressions = parseIntSafe(raw["Impresi"]);
+    const reach = parseIntSafe(raw["Jangkauan"]);
+    const uniqueLinkClicks = parseIntSafe(uniqueLinkClicksRaw);
+    const results = parseIntSafe(raw["Hasil"]);
+    const shopClicks = parseIntSafe(raw["shop_clicks"]);
+    const allClicks = parseIntSafe(raw["Klik (semua)"]);
+    const landingPageViews = parseIntSafe(raw["Tayangan halaman tujuan"]);
+
+    const existing = agg.get(key);
+    if (existing) {
+      // Jumlahkan metrik yang aditif lintas wilayah
+      existing.spend += spend;
+      existing.impressions += impressions;
+      existing.reach += reach;
+      existing.uniqueLinkClicks += uniqueLinkClicks;
+      existing.results += results;
+      existing.shopClicks += shopClicks;
+      existing.allClicks += allClicks;
+      existing.landingPageViews += landingPageViews;
+    } else {
+      agg.set(key, {
+        campaignName: name,
+        delivery: raw["Penayangan kampanye"] || "",
+        results,
+        resultIndicator: raw["Indikator Hasil"] || "",
+        costPerResult: 0, // dihitung ulang setelah agregasi
+        spend,
+        impressions,
+        reach,
+        frequency: 0, // dihitung ulang
+        uniqueLinkClicks,
+        startDate,
+        endDate: raw["Akhir pelaporan"] || "",
+        budget: raw["Anggaran Set Iklan"] || "",
+        budgetType: raw["Jenis Anggaran Set Iklan"] || "",
+        ends: raw["Berakhir"] || "",
+        attribution: raw["Pengaturan atribusi"] || "",
+        resultsInitial: raw["Hasil (awal)"] || "",
+        resultIndicatorInitial: raw["Indikator hasil (awal)"] || "",
+
+        region: "", // agregat semua wilayah (bukan satu provinsi)
+        shopClicks,
+        cpc: 0,
+        ctr: 0,
+        allClicks,
+        allCtr: 0,
+        allCpc: 0,
+        landingPageViews,
+        costPerLpv: 0,
+        cpm: 0,
+      });
+    }
+  }
+
+  // Hitung ulang rasio turunan dari metrik dasar yang sudah dijumlahkan
+  const rows: MetaAdRow[] = [];
+  for (const r of agg.values()) {
+    r.frequency = r.reach > 0 ? r.impressions / r.reach : 0;
+    r.cpc = r.uniqueLinkClicks > 0 ? r.spend / r.uniqueLinkClicks : 0;
+    r.ctr = r.impressions > 0 ? r.uniqueLinkClicks / r.impressions : 0;
+    r.allCpc = r.allClicks > 0 ? r.spend / r.allClicks : 0;
+    r.allCtr = r.impressions > 0 ? r.allClicks / r.impressions : 0;
+    r.cpm = r.impressions > 0 ? (r.spend / r.impressions) * 1000 : 0;
+    r.costPerResult = r.results > 0 ? r.spend / r.results : 0;
+    r.costPerLpv = r.landingPageViews > 0 ? r.spend / r.landingPageViews : 0;
+    rows.push(r);
   }
 
   return { rows, errors };
@@ -246,7 +284,7 @@ export function parseShopeeCommissionCsv(content: string): { rows: ShopeeCommiss
 // Helper functions for parsing
 function parseIntSafe(value: string): number {
   if (!value || value === "--" || value === "-" || value === "") return 0;
-  let cleaned = value.replace(/[Rp\s]/g, "").replace(/,.*$/, "").replace(/\./g, "");
+  const cleaned = value.replace(/[Rp\s]/g, "").replace(/,.*$/, "").replace(/\./g, "");
   const num = parseInt(cleaned, 10);
   return isNaN(num) ? 0 : num;
 }

@@ -11,6 +11,26 @@ function parseDateUtcEndOfDay(dateStr: string): Date {
   return new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
 }
 
+// Gabung gte/lte jadi SATU objek filter. Jangan pakai dua spread `{clickTimeUTC:{gte}}`
+// dan `{clickTimeUTC:{lte}}` terpisah — key yang sama saling menimpa (lte menghapus gte),
+// sehingga batas bawah rentang hilang.
+function dateRange(fromDate: string | null, toDate: string | null) {
+  if (!fromDate && !toDate) return undefined;
+  return {
+    ...(fromDate ? { gte: parseDateUtc(fromDate) } : {}),
+    ...(toDate ? { lte: parseDateUtc(toDate) } : {}),
+  };
+}
+
+// Untuk kolom bertimestamp (clickTimeUTC), batas atas pakai akhir-hari.
+function clickRange(fromDate: string | null, toDate: string | null) {
+  if (!fromDate && !toDate) return undefined;
+  return {
+    ...(fromDate ? { gte: parseDateUtc(fromDate) } : {}),
+    ...(toDate ? { lte: parseDateUtcEndOfDay(toDate) } : {}),
+  };
+}
+
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const fromDate = url.searchParams.get("from");
@@ -22,6 +42,9 @@ export async function GET(request: NextRequest) {
     ? parseInt(url.searchParams.get("metaAdAccountId")!)
     : undefined;
 
+  const dateFilter = dateRange(fromDate, toDate);
+  const clickFilter = clickRange(fromDate, toDate);
+
   // Get all campaign hubs with their linked campaigns
   const hubs = await prisma.campaignHub.findMany({
     include: {
@@ -30,8 +53,7 @@ export async function GET(request: NextRequest) {
           metaAdAccount: true,
           dailyStats: {
             where: {
-              ...(fromDate ? { date: { gte: parseDateUtc(fromDate) } } : {}),
-              ...(toDate ? { date: { lte: parseDateUtc(toDate) } } : {}),
+              ...(dateFilter ? { date: dateFilter } : {}),
             },
           },
         },
@@ -42,14 +64,12 @@ export async function GET(request: NextRequest) {
           orderItems: {
             where: {
               statusPesanan: { not: "Dibatalkan" },
-              ...(fromDate ? { clickTimeUTC: { gte: parseDateUtc(fromDate) } } : {}),
-              ...(toDate ? { clickTimeUTC: { lte: parseDateUtcEndOfDay(toDate) } } : {}),
+              ...(clickFilter ? { clickTimeUTC: clickFilter } : {}),
             },
           },
           clicks: {
             where: {
-              ...(fromDate ? { clickTimeUTC: { gte: parseDateUtc(fromDate) } } : {}),
-              ...(toDate ? { clickTimeUTC: { lte: parseDateUtcEndOfDay(toDate) } } : {}),
+              ...(clickFilter ? { clickTimeUTC: clickFilter } : {}),
             },
           },
         },
@@ -136,22 +156,23 @@ async function getOrganicStats(
   fromDate?: string,
   toDate?: string
 ) {
-  const whereClause: Record<string, unknown> = {
-    shopeeCampaignId: null,
-    ...(shopeeAccountId ? { shopeeAccountId } : {}),
-    ...(fromDate ? { clickTimeUTC: { gte: parseDateUtc(fromDate) } } : {}),
-    ...(toDate ? { clickTimeUTC: { lte: parseDateUtcEndOfDay(toDate) } } : {}),
-  };
+  const clickFilter = clickRange(fromDate ?? null, toDate ?? null);
 
   const orderItems = await prisma.shopeeOrderItem.findMany({
     where: {
-      ...whereClause,
+      shopeeCampaignId: null,
       statusPesanan: { not: "Dibatalkan" },
-    } as any,
+      ...(shopeeAccountId ? { shopeeAccountId } : {}),
+      ...(clickFilter ? { clickTimeUTC: clickFilter } : {}),
+    },
   });
 
   const clicks = await prisma.shopeeClick.findMany({
-    where: whereClause as any,
+    where: {
+      shopeeCampaignId: null,
+      ...(shopeeAccountId ? { shopeeAccountId } : {}),
+      ...(clickFilter ? { clickTimeUTC: clickFilter } : {}),
+    },
   });
 
   const komisiTertunda = orderItems

@@ -1,11 +1,25 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { showToast } from "@/components/toast-container";
 import { formatCurrency, formatNumber } from "@/lib/utils";
+import type { MetaAdRow, ShopeeClickRow, ShopeeCommissionRow } from "@/lib/csv-parser";
 
 type ImportType = "meta" | "shopee_click" | "shopee_commission";
+
+// Baris preview bisa berasal dari salah satu dari tiga parser — gabungkan sebagai Partial.
+type PreviewRow = Partial<MetaAdRow & ShopeeClickRow & ShopeeCommissionRow>;
+
+interface ImportResultResponse {
+  inserted: number;
+  updated: number;
+  skipped: number;
+  errors?: string[];
+  parseErrors?: string[];
+  totalParsed?: number;
+  error?: string;
+}
 
 const typeLabels: Record<ImportType, string> = {
   meta: "Meta Ads Campaign Report",
@@ -26,22 +40,22 @@ export default function ImportPage() {
   });
   const [selectedAccountId, setSelectedAccountId] = useState<number>(0);
   const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<any[] | null>(null);
+  const [preview, setPreview] = useState<PreviewRow[] | null>(null);
   const [previewTotal, setPreviewTotal] = useState(0);
   const [previewErrors, setPreviewErrors] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<ImportResultResponse | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    fetchAccounts();
-  }, []);
-
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     const res = await fetch("/api/accounts");
     const data = await res.json();
     setAccounts({ shopee: data.shopeeAccounts, meta: data.metaAdAccounts });
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchAccounts();
+  }, [fetchAccounts]);
 
   const getAccountsForType = () => {
     if (importType === "meta") return accounts.meta;
@@ -124,7 +138,7 @@ export default function ImportPage() {
 
   const getPreviewColumns = () => typeColumns[importType];
 
-  const getPreviewValue = (row: any, col: string) => {
+  const getPreviewValue = (row: PreviewRow, col: string) => {
     switch (col) {
       case "Nama kampanye":
         return row.campaignName;
@@ -306,7 +320,7 @@ export default function ImportPage() {
                 Skip: <strong>{result.skipped}</strong>
               </div>
             </div>
-            {result.parseErrors?.length > 0 && (
+            {result.parseErrors && result.parseErrors.length > 0 && (
               <div className="text-xs text-yellow-700 mt-2">
                 {result.parseErrors.length} peringatan parsing
               </div>

@@ -107,7 +107,7 @@ export default function DataBrowserPage() {
           <div className="flex items-center gap-2">
             <select
               value={pivotMetric}
-              onChange={(e) => setPivotMetric(e.target.value as any)}
+              onChange={(e) => setPivotMetric(e.target.value as "komisi" | "spend" | "orders")}
               className="px-3 py-2 border rounded-md text-sm"
             >
               <option value="komisi">Komisi</option>
