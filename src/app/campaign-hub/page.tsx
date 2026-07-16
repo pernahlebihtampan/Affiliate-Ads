@@ -128,6 +128,122 @@ function SearchSelect<T extends { id: number }>({
   );
 }
 
+// ===== QUICK SHOPEE SEARCH (inline di kolom Aksi) =====
+function QuickShopeeSearch<T extends { id: number }>({
+  items,
+  selectedId,
+  onSelect,
+  displayFn,
+  onConfirm,
+  onCancel,
+  loading,
+}: {
+  items: T[];
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+  displayFn: (item: T) => string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const filtered = search
+    ? items.filter((item) =>
+        displayFn(item).toLowerCase().includes(search.toLowerCase())
+      )
+    : items;
+
+  const selected = items.find((i) => i.id === selectedId);
+
+  // Close on click outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        onCancel();
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [onCancel]);
+
+  return (
+    <div ref={wrapperRef} className="flex items-center gap-1">
+      <div className="relative">
+        <div
+          className="px-2 py-1 border rounded text-xs w-40 cursor-pointer flex items-center justify-between bg-white"
+          onClick={() => setOpen(!open)}
+        >
+          <span className={selected ? "truncate" : "text-gray-400 truncate"}>
+            {selected ? displayFn(selected) : "-- Cari Tag --"}
+          </span>
+          <svg className={`w-3 h-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+        {open && (
+          <div className="absolute z-30 mt-1 left-0 w-72 bg-white border rounded-md shadow-lg max-h-64 flex flex-col">
+            <div className="p-1 border-b">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Ketik untuk mencari..."
+                className="w-full px-2 py-1.5 border rounded text-xs outline-none focus:ring-1 focus:ring-blue-400"
+                autoFocus
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {filtered.length === 0 ? (
+                <div className="p-3 text-xs text-gray-400 text-center">Tidak ditemukan</div>
+              ) : (
+                <div className="py-1">
+                  {filtered.slice(0, 200).map((item) => (
+                    <div
+                      key={item.id}
+                      className={`px-3 py-1.5 text-xs cursor-pointer hover:bg-blue-50 truncate ${
+                        item.id === selectedId ? "bg-blue-100 font-medium" : ""
+                      }`}
+                      onClick={() => {
+                        onSelect(item.id);
+                        setOpen(false);
+                        setSearch("");
+                      }}
+                    >
+                      {displayFn(item)}
+                    </div>
+                  ))}
+                  {filtered.length > 200 && (
+                    <div className="px-3 py-1.5 text-xs text-gray-400 text-center">
+                      … dan {filtered.length - 200} lainnya
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      <button
+        onClick={onConfirm}
+        disabled={loading || !selectedId}
+        className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+      >
+        {loading ? "..." : "✓"}
+      </button>
+      <button
+        onClick={onCancel}
+        className="px-2 py-1 text-gray-500 hover:text-gray-700 text-xs"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 export default function CampaignHubPage() {
   const [metaCampaigns, setMetaCampaigns] = useState<MetaCampaign[]>([]);
   const [shopeeCampaigns, setShopeeCampaigns] = useState<ShopeeCampaign[]>([]);
@@ -139,6 +255,10 @@ export default function CampaignHubPage() {
   const [linkingId, setLinkingId] = useState<number | null>(null);
   const [quickSelectMeta, setQuickSelectMeta] = useState<number | null>(null); // metaId yang dropdown in-row-nya terbuka
   const tableRef = useRef<HTMLDivElement>(null);
+
+  // Filter pencarian untuk tabel
+  const [filterMeta, setFilterMeta] = useState("");
+  const [filterShopee, setFilterShopee] = useState("");
 
   // Simpan & restore scroll position agar tidak lompat ke atas saat refresh
   const saveScroll = () => tableRef.current?.scrollTop || 0;
@@ -258,9 +378,16 @@ export default function CampaignHubPage() {
     await handleLink(selectedMetaId, selectedShopeeId);
   };
 
-  const filteredMetaCampaigns = showUnlinkedOnly
-    ? metaCampaigns.filter((m) => !m.hub)
-    : metaCampaigns;
+  // Filter berdasarkan pencarian teks (Kampanye Meta & Tag Shopee)
+  const filteredMetaCampaigns = metaCampaigns.filter((m) => {
+    if (showUnlinkedOnly && m.hub) return false;
+    if (filterMeta && !m.name.toLowerCase().includes(filterMeta.toLowerCase())) return false;
+    if (filterShopee) {
+      const shopeeName = m.hub?.shopeeCampaign.name || "";
+      if (!shopeeName.toLowerCase().includes(filterShopee.toLowerCase())) return false;
+    }
+    return true;
+  });
 
   const unlinkedShopee = shopeeCampaigns.filter((s) => !s.hub);
 
@@ -358,8 +485,8 @@ export default function CampaignHubPage() {
           </div>
         )}
 
-        {/* Toggle */}
-        <div className="flex items-center gap-2">
+        {/* Filter & Toggle */}
+        <div className="flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -369,6 +496,33 @@ export default function CampaignHubPage() {
             />
             Hanya tampilkan yang belum terhubung
           </label>
+          <div className="flex-1" />
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                value={filterMeta}
+                onChange={(e) => setFilterMeta(e.target.value)}
+                placeholder="Cari Kampanye Meta..."
+                className="pl-8 pr-3 py-1.5 border rounded-md text-sm w-56 outline-none focus:ring-1 focus:ring-blue-400"
+              />
+            </div>
+            <div className="relative">
+              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                value={filterShopee}
+                onChange={(e) => setFilterShopee(e.target.value)}
+                placeholder="Cari Tag Shopee..."
+                className="pl-8 pr-3 py-1.5 border rounded-md text-sm w-56 outline-none focus:ring-1 focus:ring-blue-400"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Campaign List */}
@@ -429,47 +583,26 @@ export default function CampaignHubPage() {
                               Putus
                             </button>
                           ) : quickSelectMeta === mc.id ? (
-                            <div className="flex items-center gap-1">
-                              <select
-                                value={selectedShopeeId || ""}
-                                onChange={(e) => setSelectedShopeeId(parseInt(e.target.value) || null)}
-                                className="px-2 py-1 border rounded text-xs w-40"
-                                autoFocus
-                              >
-                                <option value="">-- Tag --</option>
-                                {unlinkedShopee.map((s) => (
-                                  <option key={s.id} value={s.id}>
-                                    {s.name.length > 20
-                                      ? s.name.slice(0, 20) + "…"
-                                      : s.name}
-                                  </option>
-                                ))}
-                              </select>
-                              <button
-                                onClick={() => {
-                                  if (selectedShopeeId) {
-                                    handleLink(mc.id, selectedShopeeId);
-                                    setQuickSelectMeta(null);
-                                    setSelectedShopeeId(null);
-                                  } else {
-                                    showToast("Pilih tag Shopee terlebih dahulu");
-                                  }
-                                }}
-                                disabled={linkingId === mc.id || !selectedShopeeId}
-                                className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50"
-                              >
-                                {linkingId === mc.id ? "..." : "✓"}
-                              </button>
-                              <button
-                                onClick={() => {
+                            <QuickShopeeSearch
+                              items={unlinkedShopee}
+                              selectedId={selectedShopeeId}
+                              onSelect={(id) => setSelectedShopeeId(id)}
+                              displayFn={(s) => `${s.name} (${s.shopeeAccount.name})`}
+                              onConfirm={() => {
+                                if (selectedShopeeId) {
+                                  handleLink(mc.id, selectedShopeeId);
                                   setQuickSelectMeta(null);
                                   setSelectedShopeeId(null);
-                                }}
-                                className="px-2 py-1 text-gray-500 hover:text-gray-700 text-xs"
-                              >
-                                ✕
-                              </button>
-                            </div>
+                                } else {
+                                  showToast("Pilih tag Shopee terlebih dahulu");
+                                }
+                              }}
+                              onCancel={() => {
+                                setQuickSelectMeta(null);
+                                setSelectedShopeeId(null);
+                              }}
+                              loading={linkingId === mc.id}
+                            />
                           ) : (
                             <button
                               onClick={() => {

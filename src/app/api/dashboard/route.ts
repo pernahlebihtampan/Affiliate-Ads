@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+function parseDateUtc(dateStr: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+function parseDateUtcEndOfDay(dateStr: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+}
+
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const fromDate = url.searchParams.get("from");
@@ -20,8 +30,8 @@ export async function GET(request: NextRequest) {
           metaAdAccount: true,
           dailyStats: {
             where: {
-              ...(fromDate ? { date: { gte: new Date(fromDate) } } : {}),
-              ...(toDate ? { date: { lte: new Date(toDate) } } : {}),
+              ...(fromDate ? { date: { gte: parseDateUtc(fromDate) } } : {}),
+              ...(toDate ? { date: { lte: parseDateUtc(toDate) } } : {}),
             },
           },
         },
@@ -32,14 +42,14 @@ export async function GET(request: NextRequest) {
           orderItems: {
             where: {
               statusPesanan: { not: "Dibatalkan" },
-              ...(fromDate ? { clickTimeUTC: { gte: new Date(fromDate) } } : {}),
-              ...(toDate ? { clickTimeUTC: { lte: new Date(toDate + "T23:59:59") } } : {}),
+              ...(fromDate ? { clickTimeUTC: { gte: parseDateUtc(fromDate) } } : {}),
+              ...(toDate ? { clickTimeUTC: { lte: parseDateUtcEndOfDay(toDate) } } : {}),
             },
           },
           clicks: {
             where: {
-              ...(fromDate ? { clickTimeUTC: { gte: new Date(fromDate) } } : {}),
-              ...(toDate ? { clickTimeUTC: { lte: new Date(toDate + "T23:59:59") } } : {}),
+              ...(fromDate ? { clickTimeUTC: { gte: parseDateUtc(fromDate) } } : {}),
+              ...(toDate ? { clickTimeUTC: { lte: parseDateUtcEndOfDay(toDate) } } : {}),
             },
           },
         },
@@ -129,8 +139,8 @@ async function getOrganicStats(
   const whereClause: Record<string, unknown> = {
     shopeeCampaignId: null,
     ...(shopeeAccountId ? { shopeeAccountId } : {}),
-    ...(fromDate ? { clickTimeUTC: { gte: new Date(fromDate) } } : {}),
-    ...(toDate ? { clickTimeUTC: { lte: new Date(toDate + "T23:59:59") } } : {}),
+    ...(fromDate ? { clickTimeUTC: { gte: parseDateUtc(fromDate) } } : {}),
+    ...(toDate ? { clickTimeUTC: { lte: parseDateUtcEndOfDay(toDate) } } : {}),
   };
 
   const orderItems = await prisma.shopeeOrderItem.findMany({

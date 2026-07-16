@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+function parseDateUtc(dateStr: string): Date {
+  // Parse YYYY-MM-DD sebagai UTC agar konsisten dengan DateTime di database
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+function parseDateUtcEndOfDay(dateStr: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
+}
+
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const fromDate = url.searchParams.get("from");
@@ -13,8 +24,8 @@ export async function GET(request: NextRequest) {
         include: {
           dailyStats: {
             where: {
-              ...(fromDate ? { date: { gte: new Date(fromDate) } } : {}),
-              ...(toDate ? { date: { lte: new Date(toDate) } } : {}),
+              ...(fromDate ? { date: { gte: parseDateUtc(fromDate) } } : {}),
+              ...(toDate ? { date: { lte: parseDateUtc(toDate) } } : {}),
             },
           },
         },
@@ -25,10 +36,10 @@ export async function GET(request: NextRequest) {
             where: {
               statusPesanan: { not: "Dibatalkan" },
               ...(fromDate
-                ? { clickTimeUTC: { gte: new Date(fromDate) } }
+                ? { clickTimeUTC: { gte: parseDateUtc(fromDate) } }
                 : {}),
               ...(toDate
-                ? { clickTimeUTC: { lte: new Date(toDate + "T23:59:59") } }
+                ? { clickTimeUTC: { lte: parseDateUtcEndOfDay(toDate) } }
                 : {}),
             },
           },
@@ -56,20 +67,38 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Merge semua tanggal (dari spendMap dan komisiMap)
-  const allDates = new Set<string>([...spendMap.keys(), ...komisiMap.keys()]);
-  const sortedDates = Array.from(allDates).sort();
+  // Tentukan rentang tanggal penuh dari filter yang dipilih
+  let startDate: Date, endDate: Date;
+  if (fromDate) {
+    startDate = parseDateUtc(fromDate);
+  } else {
+    const allDates = [...spendMap.keys(), ...komisiMap.keys()].sort();
+    startDate = allDates.length > 0 ? new Date(allDates[0] + "T00:00:00Z") : new Date();
+    startDate.setUTCDate(startDate.getUTCDate() - 30);
+  }
 
-  const dailyData = sortedDates.map((date) => {
-    const komisi = komisiMap.get(date) || 0;
-    const spend = spendMap.get(date) || 0;
-    return {
-      date,
+  if (toDate) {
+    endDate = parseDateUtc(toDate);
+  } else {
+    endDate = new Date();
+  }
+
+  // Generate seluruh rentang tanggal (termasuk tanggal tanpa data)
+  const dailyData: { date: string; komisi: number; spend: number; profit: number }[] = [];
+  const current = new Date(startDate);
+  while (current <= endDate) {
+    const dateKey = current.toISOString().split("T")[0];
+    const komisi = komisiMap.get(dateKey) || 0;
+    const spend = spendMap.get(dateKey) || 0;
+    dailyData.push({
+      date: dateKey,
       komisi,
       spend,
       profit: komisi - spend,
-    };
-  });
+    });
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
 
   return NextResponse.json(dailyData);
 }
+
