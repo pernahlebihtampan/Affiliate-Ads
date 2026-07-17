@@ -3,8 +3,10 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 
 // Kontrol proses untuk operator awam: Restart & Update via systemd (mirip
-// shopee-automation). Bedanya app ini jalan mode PRODUKSI, jadi "Update" harus
-// build ulang di komputer deploy sebelum restart bermakna.
+// shopee-automation). Bedanya app ini jalan mode PRODUKSI, jadi keduanya harus
+// build ulang sebelum restart bermakna. "Update" menarik kode dari GitHub dulu;
+// "Restart" build dari kode yang sudah ada di komputer ini — dipakai selama
+// coding masih dilakukan langsung di komputer yang sama (belum lewat GitHub).
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -58,10 +60,22 @@ export async function POST(request: NextRequest) {
   const action = body.action;
 
   if (action === "restart") {
+    // Build dari source lokal (tanpa git pull / npm install). Jika build
+    // gagal, JANGAN restart — biar versi lama tetap jalan.
+    const log: string[] = [];
+    const build = await run(NPM, ["run", "build"]);
+    log.push("$ npm run build\n" + build.out);
+    if (!build.ok) {
+      return NextResponse.json(
+        { ok: false, step: "build", log: log.join("\n\n") },
+        { status: 500 }
+      );
+    }
     triggerRestart();
     return NextResponse.json({
       ok: true,
-      message: "Restart dipicu. Server akan hidup kembali dalam beberapa detik.",
+      message: "Build selesai. Server restart untuk memuat versi terbaru.",
+      log: log.join("\n\n"),
     });
   }
 

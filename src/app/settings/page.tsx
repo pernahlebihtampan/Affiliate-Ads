@@ -38,11 +38,11 @@ export default function SettingsPage() {
 
   const doRestart = async () => {
     if (busy) return;
-    if (!confirm("Restart server sekarang? Dashboard akan tidak bisa diakses beberapa detik.")) {
+    if (!confirm("Build ulang & restart? Akan: npm run build → restart (tanpa git pull). Bisa memakan 1–2 menit; dashboard sempat tidak bisa diakses beberapa detik.")) {
       return;
     }
     setBusy("restart");
-    setLog("");
+    setLog("Build ulang dari kode di komputer ini… (mohon tunggu, jangan tutup halaman)");
     try {
       const res = await fetch("/api/system", {
         method: "POST",
@@ -50,17 +50,17 @@ export default function SettingsPage() {
         body: JSON.stringify({ action: "restart" }),
       });
       const data = await res.json();
+      setLog(data.log || data.message || JSON.stringify(data));
       if (res.ok) {
-        showToast(data.message || "Restart dipicu", undefined, "success");
+        showToast(data.message || "Build selesai, restart dipicu", undefined, "success");
         waitForServerAndReload();
       } else {
-        showToast("Gagal restart: " + (data.error || "unknown"), undefined, "destructive");
+        showToast(`Restart gagal di step: ${data.step || "?"}`, undefined, "destructive");
         setBusy(null);
       }
     } catch {
-      // Koneksi terputus bisa berarti restart memang sudah jalan.
-      showToast("Restart dipicu (koneksi terputus)", undefined, "success");
-      waitForServerAndReload();
+      showToast("Koneksi terputus saat build ulang", undefined, "destructive");
+      setBusy(null);
     }
   };
 
@@ -107,8 +107,9 @@ export default function SettingsPage() {
             <h2 className="font-medium">Deploy &amp; Pembaruan</h2>
             <p className="text-sm text-muted-foreground mt-1">
               <b>Update</b> = tarik kode dari GitHub, build ulang, lalu restart otomatis
-              (jalankan setelah selesai coding &amp; push). <b>Restart</b> = muat ulang
-              server tanpa menarik kode baru.
+              (jalankan setelah selesai coding &amp; push). <b>Restart</b> = build ulang
+              dari kode yang sudah ada di komputer ini lalu restart — dipakai setelah
+              kode diedit langsung di komputer ini, tanpa menarik dari GitHub.
             </p>
           </div>
 
@@ -125,7 +126,7 @@ export default function SettingsPage() {
               disabled={busy !== null}
               className="px-4 py-2 border rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
             >
-              {busy === "restart" ? "Restarting…" : "🔄 Restart"}
+              {busy === "restart" ? "Sedang build & restart…" : "🔄 Restart (build + restart)"}
             </button>
           </div>
 
@@ -137,8 +138,9 @@ export default function SettingsPage() {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Build dilakukan di komputer ini saat menekan <b>Update</b> (folder{" "}
-          <code>.next</code> tidak di-commit ke Git). Repo harus punya kredensial
+          Kedua tombol mem-build di komputer ini (folder <code>.next</code> tidak
+          di-commit ke Git); bila build gagal, server tidak di-restart dan versi
+          lama tetap jalan. Khusus <b>Update</b>: repo harus punya kredensial
           GitHub yang tersimpan agar <code>git pull</code> tidak minta password.
         </p>
       </div>
