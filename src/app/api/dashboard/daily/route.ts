@@ -131,6 +131,27 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Kampanye Shopee belum-tertaut di Hub — komisinya ikut di seri grafik
+  // (konsisten dengan baris terpisah di tabel /api/dashboard). Aturan skip
+  // sama: sembunyikan bila filter sisi-Meta aktif (tak ada sisi Meta untuk
+  // dicocokkan/diprorata) atau toggle UI dimatikan (`unlinked=0`); filter tag
+  // exact match diterapkan.
+  const includeUnlinked = url.searchParams.get("unlinked") !== "0";
+  const showUnlinked = includeUnlinked && !metaAdAccountId && !campaignQuery && !region;
+  const unlinkedCampaigns = showUnlinked
+    ? (
+        await prisma.shopeeCampaign.findMany({
+          where: {
+            hub: null,
+            ...(shopeeAccountId ? { shopeeAccountId } : {}),
+          },
+          include: {
+            orderItems: { where: itemWhere },
+          },
+        })
+      ).filter((c) => !tagQuery || c.name.toLowerCase() === tagQuery)
+    : [];
+
   // Kumpulkan komisi per tanggal dari ShopeeOrderItem (clickTimeUTC),
   // dikalikan rasio prorata wilayah bila filter aktif.
   // Item Dibatalkan masuk seri terpisah: estimasi komisi yang hilang
@@ -138,10 +159,22 @@ export async function GET(request: NextRequest) {
   const komisiMap = new Map<string, number>();
   const komisiSelesaiMap = new Map<string, number>();
   const komisiBatalMap = new Map<string, number>();
-  for (const hub of hubs) {
-    const ratios = ratioByHubDate?.get(hub.metaCampaignId);
-    const periodRatio = periodRatioByHub.get(hub.metaCampaignId) ?? 0;
-    for (const item of hub.shopeeCampaign.orderItems) {
+  // (items, ratios?, periodRatio) per sumber: hub pakai prorata wilayah;
+  // belum-tertaut selalu rasio 1 (region aktif → sudah di-skip di atas).
+  const itemSources = [
+    ...hubs.map((hub) => ({
+      items: hub.shopeeCampaign.orderItems,
+      ratios: ratioByHubDate?.get(hub.metaCampaignId),
+      periodRatio: periodRatioByHub.get(hub.metaCampaignId) ?? 0,
+    })),
+    ...unlinkedCampaigns.map((c) => ({
+      items: c.orderItems,
+      ratios: undefined,
+      periodRatio: 1,
+    })),
+  ];
+  for (const { items, ratios, periodRatio } of itemSources) {
+    for (const item of items) {
       if (!item.clickTimeUTC) continue;
       const dateKey = item.clickTimeUTC.toISOString().split("T")[0];
       const ratio = ratioByHubDate ? ratios?.get(dateKey) ?? periodRatio : 1;

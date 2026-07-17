@@ -6,7 +6,9 @@ import { DailyChart } from "@/components/daily-chart";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
 interface DashboardRow {
-  metaCampaignId: number;
+  // null = kampanye Shopee bertag yang belum ditautkan di Campaign Hub
+  // (baris tetap tampil dengan spend 0 agar komisinya masuk total)
+  metaCampaignId: number | null;
   metaCampaignName: string;
   metaCampaignStatus: string;
   metaAccountName: string;
@@ -104,6 +106,10 @@ export default function DashboardPage() {
   const [l3Input, setL3Input] = useState("");
   const [l3Filter, setL3Filter] = useState("");
   const [platformFilter, setPlatformFilter] = useState("");
+  // Toggle baris "Belum tertaut" (kampanye Shopee bertag tanpa hub). Bukan
+  // filter data — hanya mode tampilan, jadi tidak ikut "Bersihkan filter".
+  // Dikirim ke API (unlinked=0) agar totals & grafik konsisten dengan tabel.
+  const [showUnlinked, setShowUnlinked] = useState(true);
   const [statuses, setStatuses] = useState<string[]>([]);
   const [l1Categories, setL1Categories] = useState<string[]>([]);
   const [l3Categories, setL3Categories] = useState<string[]>([]);
@@ -127,6 +133,7 @@ export default function DashboardPage() {
       if (l1Filter) params.set("l1", l1Filter);
       if (l3Filter) params.set("l3", l3Filter);
       if (platformFilter) params.set("platform", platformFilter);
+      if (!showUnlinked) params.set("unlinked", "0");
 
       // Fetch main dashboard data
       const res = await fetch(`/api/dashboard?${params}`);
@@ -151,7 +158,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, metaAccountFilter, shopeeAccountFilter, campaignFilter, tagFilter, regionFilter, statusFilter, l1Filter, l3Filter, platformFilter]);
+  }, [fromDate, toDate, metaAccountFilter, shopeeAccountFilter, campaignFilter, tagFilter, regionFilter, statusFilter, l1Filter, l3Filter, platformFilter, showUnlinked]);
 
   useEffect(() => {
     fetchData();
@@ -358,6 +365,18 @@ export default function DashboardPage() {
               </option>
             ))}
           </select>
+          <label
+            className="flex items-center gap-1.5 px-3 py-1.5 border rounded-md text-sm bg-white cursor-pointer select-none"
+            title="Tampilkan/sembunyikan kampanye Shopee bertag yang belum ditautkan di Campaign Hub (baris amber, spend 0). Totals & grafik ikut menyesuaikan."
+          >
+            <input
+              type="checkbox"
+              checked={showUnlinked}
+              onChange={(e) => setShowUnlinked(e.target.checked)}
+              className="accent-amber-500"
+            />
+            Belum tertaut
+          </label>
           {(metaAccountFilter || shopeeAccountFilter || campaignInput || tagInput || regionFilter || statusFilter || l1Filter || l3Input || platformFilter) && (
             <button
               onClick={() => {
@@ -390,6 +409,12 @@ export default function DashboardPage() {
             <span className="text-xs text-muted-foreground">
               ℹ️ Filter akun Meta hanya menyaring pasangan hub — panel Organik /
               Unmapped tidak ikut tersaring (data organik tak punya sisi Meta).
+            </span>
+          )}
+          {showUnlinked && (metaAccountFilter || campaignFilter || regionFilter) && (
+            <span className="text-xs text-muted-foreground">
+              ℹ️ Baris <i>Belum tertaut</i> disembunyikan saat filter akun Meta /
+              kampanye / wilayah aktif (tidak punya sisi Meta).
             </span>
           )}
           {(statusFilter || l1Filter || l3Filter || platformFilter) && (
@@ -491,22 +516,38 @@ export default function DashboardPage() {
                 ) : (
                   sortedRows.map((row) => (
                     <tr
-                      key={row.metaCampaignId}
-                      className="border-b hover:bg-gray-50"
+                      key={row.metaCampaignId ?? `unlinked-${row.shopeeCampaignId}`}
+                      className={`border-b hover:bg-gray-50 ${
+                        row.metaCampaignId === null ? "bg-amber-50/50" : ""
+                      }`}
                     >
                       <td className="p-3">
-                        <StatusIndicator status={row.metaCampaignStatus} />
+                        {row.metaCampaignId === null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <StatusIndicator status={row.metaCampaignStatus} />
+                        )}
                       </td>
                       <td className="p-3">
-                        <a
-                          href={`/campaign/${row.metaCampaignId}`}
-                          className="text-primary hover:underline font-medium"
-                        >
-                          {row.metaCampaignName}
-                        </a>
+                        {row.metaCampaignId === null ? (
+                          <a
+                            href="/campaign-hub"
+                            title="Kampanye Shopee ini belum ditautkan ke kampanye Meta — tautkan di Campaign Hub"
+                            className="text-muted-foreground italic hover:underline"
+                          >
+                            Belum tertaut
+                          </a>
+                        ) : (
+                          <a
+                            href={`/campaign/${row.metaCampaignId}`}
+                            className="text-primary hover:underline font-medium"
+                          >
+                            {row.metaCampaignName}
+                          </a>
+                        )}
                       </td>
                       <td className="p-3 text-muted-foreground">
-                        {row.metaAccountName}
+                        {row.metaCampaignId === null ? "—" : row.metaAccountName}
                       </td>
                       <td className="p-3 text-muted-foreground">
                         {row.shopeeCampaignName}
@@ -533,13 +574,18 @@ export default function DashboardPage() {
                         )}
                       </td>
                       <td className="p-3 text-right">
-                        <span
-                          className={`px-2 py-0.5 rounded text-xs font-medium ${getRoasColor(
-                            row.roas
-                          )}`}
-                        >
-                          {row.roas.toFixed(2)}x
-                        </span>
+                        {row.metaCampaignId === null ? (
+                          // Tanpa spend, ROAS tidak bermakna (badge 0.00x merah menyesatkan)
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <span
+                            className={`px-2 py-0.5 rounded text-xs font-medium ${getRoasColor(
+                              row.roas
+                            )}`}
+                          >
+                            {row.roas.toFixed(2)}x
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))

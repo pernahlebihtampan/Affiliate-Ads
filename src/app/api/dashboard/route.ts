@@ -219,18 +219,92 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  // Calculate totals
+  // Kampanye Shopee bertag yang BELUM ditautkan di Campaign Hub — komisinya
+  // tetap ditampilkan sebagai baris terpisah (spend 0) supaya tidak "hilang"
+  // dari dashboard. Disembunyikan bila filter sisi-Meta aktif (akun Meta /
+  // kampanye / wilayah) karena tidak ada sisi Meta untuk dicocokkan/diprorata,
+  // atau saat toggle "Belum tertaut" di UI dimatikan (`unlinked=0` — totals &
+  // grafik ikut mengecualikan agar konsisten dengan tabel).
+  const includeUnlinked = url.searchParams.get("unlinked") !== "0";
+  const showUnlinked = includeUnlinked && !metaAdAccountId && !campaignQuery && !region;
+  const unlinkedCampaigns = showUnlinked
+    ? await prisma.shopeeCampaign.findMany({
+        where: {
+          hub: null,
+          ...(shopeeAccountId ? { shopeeAccountId } : {}),
+        },
+        include: {
+          shopeeAccount: true,
+          orderItems: { where: itemWhere },
+          clicks: {
+            where: {
+              ...(clickFilter ? { clickTimeUTC: clickFilter } : {}),
+            },
+          },
+        },
+      })
+    : [];
+
+  const unlinkedRows = unlinkedCampaigns
+    .filter((c) => !tagQuery || c.name.toLowerCase() === tagQuery)
+    .map((c) => {
+      const orderItems = c.orderItems;
+      const komisiTertunda = orderItems
+        .filter((o) => o.statusPesanan === "Tertunda")
+        .reduce((s, o) => s + o.komisiBersihRp, 0);
+      const komisiSelesai = orderItems
+        .filter((o) => o.statusPesanan === "Selesai")
+        .reduce((s, o) => s + o.komisiBersihRp, 0);
+      const totalKomisi = komisiTertunda + komisiSelesai;
+      const totalOrders = new Set(orderItems.map((o) => o.idPemesanan)).size;
+      const shopeeClicks = c.clicks.length;
+
+      return {
+        metaCampaignId: null as number | null,
+        metaCampaignName: "",
+        metaCampaignStatus: "",
+        metaAccountName: "",
+        shopeeCampaignId: c.id,
+        shopeeCampaignName: c.name,
+        shopeeAccountName: c.shopeeAccount.name,
+        spend: 0,
+        impressions: 0,
+        metaClicks: 0,
+        shopeeClicks,
+        orders: totalOrders,
+        items: orderItems.length,
+        nilaiPembelian: orderItems.reduce((s, o) => s + o.nilaiPembelianRp, 0),
+        komisiTertunda,
+        komisiSelesai,
+        totalKomisi,
+        roas: 0,
+        cpc: 0,
+        epc: shopeeClicks > 0 ? totalKomisi / shopeeClicks : 0,
+        cr: shopeeClicks > 0 ? totalOrders / shopeeClicks : 0,
+      };
+    })
+    // Hanya yang punya data di rentang terpilih — tag mati tidak memenuhi tabel
+    .filter((r) => r.totalKomisi > 0 || r.orders > 0 || r.shopeeClicks > 0);
+
+  const allRows = [...rows, ...unlinkedRows];
+
+  // Tag belum-tertaut ikut ditawarkan di dropdown filter Tag Shopee
+  const allTagOptions = [
+    ...new Set([...tagOptions, ...unlinkedRows.map((r) => r.shopeeCampaignName)]),
+  ].sort((a, b) => a.localeCompare(b, "id-ID"));
+
+  // Calculate totals (termasuk baris belum-tertaut)
   const totals = {
-    spend: rows.reduce((s, r) => s + r.spend, 0),
-    impressions: rows.reduce((s, r) => s + r.impressions, 0),
-    metaClicks: rows.reduce((s, r) => s + r.metaClicks, 0),
-    shopeeClicks: rows.reduce((s, r) => s + r.shopeeClicks, 0),
-    orders: rows.reduce((s, r) => s + r.orders, 0),
-    items: rows.reduce((s, r) => s + r.items, 0),
-    nilaiPembelian: rows.reduce((s, r) => s + r.nilaiPembelian, 0),
-    komisiTertunda: rows.reduce((s, r) => s + r.komisiTertunda, 0),
-    komisiSelesai: rows.reduce((s, r) => s + r.komisiSelesai, 0),
-    totalKomisi: rows.reduce((s, r) => s + r.totalKomisi, 0),
+    spend: allRows.reduce((s, r) => s + r.spend, 0),
+    impressions: allRows.reduce((s, r) => s + r.impressions, 0),
+    metaClicks: allRows.reduce((s, r) => s + r.metaClicks, 0),
+    shopeeClicks: allRows.reduce((s, r) => s + r.shopeeClicks, 0),
+    orders: allRows.reduce((s, r) => s + r.orders, 0),
+    items: allRows.reduce((s, r) => s + r.items, 0),
+    nilaiPembelian: allRows.reduce((s, r) => s + r.nilaiPembelian, 0),
+    komisiTertunda: allRows.reduce((s, r) => s + r.komisiTertunda, 0),
+    komisiSelesai: allRows.reduce((s, r) => s + r.komisiSelesai, 0),
+    totalKomisi: allRows.reduce((s, r) => s + r.totalKomisi, 0),
     roas: 0,
   };
   totals.roas = totals.spend > 0 ? totals.totalKomisi / totals.spend : 0;
@@ -271,7 +345,8 @@ export async function GET(request: NextRequest) {
 
   // estimated: metrik Shopee (komisi/pesanan/klik) adalah hasil prorata wilayah
   return NextResponse.json({
-    rows, totals, organicStats, regions, campaignOptions, tagOptions,
+    rows: allRows, totals, organicStats, regions, campaignOptions,
+    tagOptions: allTagOptions,
     statuses: statusRows.map((r) => r.statusPesanan),
     l1Categories: l1Rows.map((r) => r.l1Kategori),
     l3Categories: l3Rows.map((r) => r.l3Kategori),
