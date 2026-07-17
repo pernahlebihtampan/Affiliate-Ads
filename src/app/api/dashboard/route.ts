@@ -103,12 +103,20 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  // Opsi autocomplete filter kampanye/tag di UI — dari SEMUA hub (sebelum
-  // difilter) supaya list tetap lengkap saat sebuah filter sedang aktif.
-  const campaignOptions = [...new Set(hubs.map((h) => h.metaCampaign.name))].sort(
+  // Opsi autocomplete filter kampanye/tag di UI — dari hub yang PUNYA data
+  // (spend/pesanan/klik) di rentang tanggal terpilih. Dihitung SEBELUM filter
+  // akun/kampanye/tag diterapkan supaya list tetap lengkap saat salah satu
+  // filter tsb sedang aktif.
+  const activeHubs = hubs.filter(
+    (h) =>
+      h.metaCampaign.dailyStats.length > 0 ||
+      h.shopeeCampaign.orderItems.length > 0 ||
+      h.shopeeCampaign.clicks.length > 0
+  );
+  const campaignOptions = [...new Set(activeHubs.map((h) => h.metaCampaign.name))].sort(
     (a, b) => a.localeCompare(b, "id-ID")
   );
-  const tagOptions = [...new Set(hubs.map((h) => h.shopeeCampaign.name))].sort(
+  const tagOptions = [...new Set(activeHubs.map((h) => h.shopeeCampaign.name))].sort(
     (a, b) => a.localeCompare(b, "id-ID")
   );
 
@@ -245,8 +253,7 @@ export async function GET(request: NextRequest) {
       })
     : [];
 
-  const unlinkedRows = unlinkedCampaigns
-    .filter((c) => !tagQuery || c.name.toLowerCase() === tagQuery)
+  const unlinkedWithData = unlinkedCampaigns
     .map((c) => {
       const orderItems = c.orderItems;
       const komisiTertunda = orderItems
@@ -286,11 +293,17 @@ export async function GET(request: NextRequest) {
     // Hanya yang punya data di rentang terpilih — tag mati tidak memenuhi tabel
     .filter((r) => r.totalKomisi > 0 || r.orders > 0 || r.shopeeClicks > 0);
 
+  const unlinkedRows = unlinkedWithData.filter(
+    (r) => !tagQuery || r.shopeeCampaignName.toLowerCase() === tagQuery
+  );
+
   const allRows = [...rows, ...unlinkedRows];
 
-  // Tag belum-tertaut ikut ditawarkan di dropdown filter Tag Shopee
+  // Tag belum-tertaut ikut ditawarkan di dropdown filter Tag Shopee —
+  // dari unlinkedWithData (sebelum filter tag) supaya list tetap lengkap
+  // saat sebuah tag sedang dipilih
   const allTagOptions = [
-    ...new Set([...tagOptions, ...unlinkedRows.map((r) => r.shopeeCampaignName)]),
+    ...new Set([...tagOptions, ...unlinkedWithData.map((r) => r.shopeeCampaignName)]),
   ].sort((a, b) => a.localeCompare(b, "id-ID"));
 
   // Calculate totals (termasuk baris belum-tertaut)
@@ -333,7 +346,12 @@ export async function GET(request: NextRequest) {
       distinct: ["l1Kategori"], select: { l1Kategori: true }, orderBy: { l1Kategori: "asc" },
     }),
     prisma.shopeeOrderItem.findMany({
-      where: { l3Kategori: { not: "" } },
+      // L3 dibatasi rentang tanggal terpilih (datalist pencarian — kategori
+      // di luar rentang tidak relevan untuk disarankan)
+      where: {
+        l3Kategori: { not: "" },
+        ...(clickFilter ? { clickTimeUTC: clickFilter } : {}),
+      },
       distinct: ["l3Kategori"], select: { l3Kategori: true }, orderBy: { l3Kategori: "asc" },
     }),
     prisma.shopeeOrderItem.findMany({

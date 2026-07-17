@@ -102,7 +102,7 @@ export default function DashboardPage() {
   // Filter level-item Shopee
   const [statusFilter, setStatusFilter] = useState("");
   const [l1Filter, setL1Filter] = useState("");
-  // L3: input bebas + datalist (978 kategori) — substring, di-debounce
+  // L3: input bebas + datalist (kategori di rentang tanggal) — substring, di-debounce
   const [l3Input, setL3Input] = useState("");
   const [l3Filter, setL3Filter] = useState("");
   const [platformFilter, setPlatformFilter] = useState("");
