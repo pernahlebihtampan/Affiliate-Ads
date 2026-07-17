@@ -21,6 +21,20 @@ interface ImportResultResponse {
   error?: string;
 }
 
+interface ImportProgress {
+  active: boolean;
+  type: string;
+  fileName: string;
+  phase: "parsing" | "importing";
+  processed: number;
+  total: number;
+  inserted: number;
+  updated: number;
+  skipped: number;
+  startedAt: number;
+  finishedAt: number | null;
+}
+
 const typeLabels: Record<ImportType, string> = {
   meta: "Meta Ads Campaign Report",
   shopee_click: "Shopee Website Click Report",
@@ -44,6 +58,7 @@ export default function ImportPage() {
   const [previewTotal, setPreviewTotal] = useState(0);
   const [previewErrors, setPreviewErrors] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState<ImportProgress | null>(null);
   const [result, setResult] = useState<ImportResultResponse | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -89,6 +104,31 @@ export default function ImportPage() {
     }
   };
 
+  const fetchProgress = async (): Promise<ImportProgress | null> => {
+    const res = await fetch("/api/import/progress");
+    return res.json();
+  };
+
+  // Kalau koneksi POST putus (mis. sistem berat), impor server bisa tetap
+  // berjalan — pantau progres sampai selesai alih-alih langsung bilang gagal.
+  const waitForImportToFinish = async (
+    fileName: string
+  ): Promise<ImportProgress | null> => {
+    let consecutiveErrors = 0;
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const p = await fetchProgress();
+        if (!p || p.fileName !== fileName) return null;
+        if (!p.active) return p;
+        setProgress(p);
+        consecutiveErrors = 0;
+      } catch {
+        if (++consecutiveErrors >= 30) return null;
+      }
+    }
+  };
+
   const handleImport = async () => {
     if (!file || !selectedAccountId) {
       showToast("Pilih akun dan file CSV", undefined, "destructive");
@@ -96,6 +136,15 @@ export default function ImportPage() {
     }
 
     setImporting(true);
+    setProgress(null);
+    const pollTimer = setInterval(async () => {
+      try {
+        const p = await fetchProgress();
+        if (p?.active) setProgress(p);
+      } catch {
+        // server sibuk — biarkan, coba lagi di tick berikutnya
+      }
+    }, 1000);
     try {
       const formData = new FormData();
       formData.set("file", file);
@@ -135,9 +184,25 @@ export default function ImportPage() {
         showToast("Import gagal", data.error, "destructive");
       }
     } catch (err) {
-      showToast("Error", String(err), "destructive");
+      const final = await waitForImportToFinish(file.name);
+      if (final) {
+        setResult({
+          inserted: final.inserted,
+          updated: final.updated,
+          skipped: final.skipped,
+        });
+        showToast(
+          "Import selesai",
+          `${final.inserted} baru, ${final.updated} update, ${final.skipped} skip`,
+          final.inserted > 0 ? "success" : "default"
+        );
+      } else {
+        showToast("Error", String(err), "destructive");
+      }
     } finally {
+      clearInterval(pollTimer);
       setImporting(false);
+      setProgress(null);
     }
   };
 
@@ -314,6 +379,44 @@ export default function ImportPage() {
           >
             {importing ? "Mengimpor..." : "Import ke Database"}
           </button>
+        )}
+
+        {/* Progress */}
+        {importing && progress && (
+          <div className="bg-white rounded-lg border p-4 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>
+                {progress.phase === "parsing"
+                  ? "Membaca & parsing file CSV..."
+                  : `Mengimpor ${formatNumber(progress.processed)} dari ${formatNumber(progress.total)} baris`}
+              </span>
+              {progress.phase === "importing" && progress.total > 0 && (
+                <span className="font-medium">
+                  {Math.round((progress.processed / progress.total) * 100)}%
+                </span>
+              )}
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full bg-primary transition-all duration-500 ${
+                  progress.phase === "parsing" ? "animate-pulse" : ""
+                }`}
+                style={{
+                  width:
+                    progress.phase === "importing" && progress.total > 0
+                      ? `${Math.round((progress.processed / progress.total) * 100)}%`
+                      : "8%",
+                }}
+              />
+            </div>
+            {progress.phase === "importing" && (
+              <p className="text-xs text-muted-foreground">
+                {formatNumber(progress.inserted)} baru ·{" "}
+                {formatNumber(progress.updated)} update ·{" "}
+                {formatNumber(progress.skipped)} skip
+              </p>
+            )}
+          </div>
         )}
 
         {/* Result */}

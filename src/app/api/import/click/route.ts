@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseShopeeClickCsv } from "@/lib/csv-parser";
 import { importShopeeClickCsv } from "@/lib/import-service";
+import { startImportProgress, finishImportProgress } from "@/lib/import-progress";
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,8 +21,9 @@ export async function POST(request: NextRequest) {
       size: fileSizeRaw ? parseInt(fileSizeRaw as string) : undefined,
     };
 
-    const content = await file.text();
-    const { rows, errors: parseErrors } = parseShopeeClickCsv(content);
+    startImportProgress("shopee_click", file.name);
+    // Parse inline agar string CSV mentah tidak tertahan di scope selama impor
+    const { rows, errors: parseErrors } = parseShopeeClickCsv(await file.text());
 
     if (rows.length === 0) {
       return NextResponse.json({ error: "No valid rows found", parseErrors }, { status: 400 });
@@ -37,5 +39,7 @@ export async function POST(request: NextRequest) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
+  } finally {
+    finishImportProgress();
   }
 }

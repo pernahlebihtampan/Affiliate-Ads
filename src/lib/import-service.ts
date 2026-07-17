@@ -1,8 +1,10 @@
 import { prisma } from "./prisma";
 import { computeFileHash, parseTagRaw, parseDateWib } from "./utils";
+import { beginImportRows, updateImportProgress } from "./import-progress";
 import type { MetaAdRow, ShopeeClickRow, ShopeeCommissionRow } from "./csv-parser";
 
 const BATCH_SIZE = 500;
+const PROGRESS_EVERY = 100;
 
 export interface ImportResult {
   inserted: number;
@@ -74,8 +76,8 @@ export async function importMetaAdCsv(
   fileMeta?: ImportFileMeta
 ): Promise<ImportResult> {
   const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: [] };
-  const fileContent = JSON.stringify(rows);
-  const fileHash = computeFileHash(fileContent);
+  // Inline agar string JSON besar tidak tertahan di scope selama impor berjalan
+  const fileHash = computeFileHash(JSON.stringify(rows));
 
   const existing = await prisma.importBatch.findUnique({ where: { fileHash } });
   if (existing) {
@@ -97,6 +99,8 @@ export async function importMetaAdCsv(
       fileName, fileHash, ...fileMetaData(fileMeta),
     },
   });
+
+  beginImportRows(rows.length);
 
   // Pre-fetch existing campaigns for cache
   const existingCampaigns = await prisma.metaCampaign.findMany({ where: { metaAdAccountId } });
@@ -168,6 +172,10 @@ export async function importMetaAdCsv(
       result.inserted++;
     }
 
+    rows[i] = null as never; // lepaskan baris terproses agar bisa di-GC (file besar)
+    if ((i + 1) % PROGRESS_EVERY === 0) {
+      updateImportProgress(i + 1, result);
+    }
     if ((i + 1) % BATCH_SIZE === 0) {
       await saveProgress(importBatch.id, result);
     }
@@ -185,8 +193,8 @@ export async function importShopeeClickCsv(
   fileMeta?: ImportFileMeta
 ): Promise<ImportResult> {
   const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: [] };
-  const fileContent = JSON.stringify(rows);
-  const fileHash = computeFileHash(fileContent);
+  // Inline agar string JSON besar tidak tertahan di scope selama impor berjalan
+  const fileHash = computeFileHash(JSON.stringify(rows));
 
   const existing = await prisma.importBatch.findUnique({ where: { fileHash } });
   if (existing) {
@@ -208,6 +216,8 @@ export async function importShopeeClickCsv(
       fileName, fileHash, ...fileMetaData(fileMeta),
     },
   });
+
+  beginImportRows(rows.length);
 
   // Pre-fetch campaigns
   const existingCampaigns = await prisma.shopeeCampaign.findMany({ where: { shopeeAccountId } });
@@ -246,6 +256,10 @@ export async function importShopeeClickCsv(
       result.inserted++;
     }
 
+    rows[i] = null as never; // lepaskan baris terproses agar bisa di-GC (file besar)
+    if ((i + 1) % PROGRESS_EVERY === 0) {
+      updateImportProgress(i + 1, result);
+    }
     if ((i + 1) % BATCH_SIZE === 0) {
       await saveProgress(importBatch.id, result);
     }
@@ -263,8 +277,8 @@ export async function importShopeeCommissionCsv(
   fileMeta?: ImportFileMeta
 ): Promise<ImportResult> {
   const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: [] };
-  const fileContent = JSON.stringify(rows);
-  const fileHash = computeFileHash(fileContent);
+  // Inline agar string JSON besar tidak tertahan di scope selama impor berjalan
+  const fileHash = computeFileHash(JSON.stringify(rows));
 
   const existing = await prisma.importBatch.findUnique({ where: { fileHash } });
   if (existing) {
@@ -286,6 +300,8 @@ export async function importShopeeCommissionCsv(
       fileName, fileHash, ...fileMetaData(fileMeta),
     },
   });
+
+  beginImportRows(rows.length);
 
   // Pre-fetch campaigns
   const existingCampaigns = await prisma.shopeeCampaign.findMany({ where: { shopeeAccountId } });
@@ -362,6 +378,10 @@ export async function importShopeeCommissionCsv(
       result.inserted++;
     }
 
+    rows[i] = null as never; // lepaskan baris terproses agar bisa di-GC (file besar)
+    if ((i + 1) % PROGRESS_EVERY === 0) {
+      updateImportProgress(i + 1, result);
+    }
     if ((i + 1) % BATCH_SIZE === 0) {
       await saveProgress(importBatch.id, result);
     }
