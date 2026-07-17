@@ -565,12 +565,14 @@ export default function DashboardPage() {
                         {formatNumber(row.orders)}
                       </td>
                       <td className="p-3 text-right">
-                        {regionFilter && "±"}
-                        {formatCurrency(row.totalKomisi)}
+                        <div>
+                          {regionFilter && "±"}
+                          {formatCurrency(row.totalKomisi)}
+                        </div>
                         {row.komisiTertunda > 0 && (
-                          <span className="text-xs text-muted-foreground ml-1">
-                            (🕐{formatCurrency(row.komisiTertunda)})
-                          </span>
+                          <div className="text-xs text-muted-foreground">
+                            🕐{formatCurrency(row.komisiTertunda)}
+                          </div>
                         )}
                       </td>
                       <td className="p-3 text-right">
