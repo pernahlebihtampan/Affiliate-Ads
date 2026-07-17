@@ -11,6 +11,7 @@ const navItems = [
   { href: "/akun", label: "Akun", icon: "👤" },
   { href: "/riwayat-impor", label: "Riwayat Impor", icon: "📋" },
   { href: "/data", label: "Data Browser", icon: "🔍" },
+  { href: "/settings", label: "Pengaturan", icon: "⚙️" },
 ];
 
 export function Sidebar() {
