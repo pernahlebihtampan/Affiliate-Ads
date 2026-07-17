@@ -56,6 +56,8 @@ export async function GET(request: NextRequest) {
   const l1Filter = url.searchParams.get("l1") || "";
   const l3Filter = url.searchParams.get("l3") || "";
   const platformFilter = url.searchParams.get("platform") || "";
+  // Filter sisi Meta: "Penayangan kampanye" terkini (active/inactive/archived)
+  const deliveryFilter = url.searchParams.get("delivery") || "";
 
   const dateFilter = dateRange(fromDate, toDate);
   const clickFilter = clickRange(fromDate, toDate);
@@ -126,6 +128,7 @@ export async function GET(request: NextRequest) {
     if (shopeeAccountId && hub.shopeeCampaign.shopeeAccountId !== shopeeAccountId) return false;
     if (campaignQuery && hub.metaCampaign.name.toLowerCase() !== campaignQuery) return false;
     if (tagQuery && hub.shopeeCampaign.name.toLowerCase() !== tagQuery) return false;
+    if (deliveryFilter && hub.metaCampaign.status !== deliveryFilter) return false;
     return true;
   });
 
@@ -230,11 +233,13 @@ export async function GET(request: NextRequest) {
   // Kampanye Shopee bertag yang BELUM ditautkan di Campaign Hub — komisinya
   // tetap ditampilkan sebagai baris terpisah (spend 0) supaya tidak "hilang"
   // dari dashboard. Disembunyikan bila filter sisi-Meta aktif (akun Meta /
-  // kampanye / wilayah) karena tidak ada sisi Meta untuk dicocokkan/diprorata,
-  // atau saat toggle "Belum tertaut" di UI dimatikan (`unlinked=0` — totals &
-  // grafik ikut mengecualikan agar konsisten dengan tabel).
+  // kampanye / wilayah / penayangan) karena tidak ada sisi Meta untuk
+  // dicocokkan/diprorata, atau saat toggle "Belum tertaut" di UI dimatikan
+  // (`unlinked=0` — totals & grafik ikut mengecualikan agar konsisten dengan
+  // tabel).
   const includeUnlinked = url.searchParams.get("unlinked") !== "0";
-  const showUnlinked = includeUnlinked && !metaAdAccountId && !campaignQuery && !region;
+  const showUnlinked =
+    includeUnlinked && !metaAdAccountId && !campaignQuery && !region && !deliveryFilter;
   const unlinkedCampaigns = showUnlinked
     ? await prisma.shopeeCampaign.findMany({
         where: {
@@ -332,7 +337,7 @@ export async function GET(request: NextRequest) {
   // "Dibatalkan" ikut ditawarkan — memilihnya sengaja menembus aturan exclude
   // untuk meninjau pesanan batal (komisiBersihRp-nya 0; lihat seri estimasi
   // komisi dibatalkan di grafik harian).
-  const [regionRows, statusRows, l1Rows, l3Rows, platformRows] = await Promise.all([
+  const [regionRows, statusRows, l1Rows, l3Rows, platformRows, deliveryRows] = await Promise.all([
     prisma.metaAdDaily.findMany({
       where: { region: { not: "" } },
       distinct: ["region"], select: { region: true }, orderBy: { region: "asc" },
@@ -358,8 +363,22 @@ export async function GET(request: NextRequest) {
       where: { platform: { not: "" } },
       distinct: ["platform"], select: { platform: true }, orderBy: { platform: "asc" },
     }),
+    prisma.metaCampaign.findMany({
+      where: { status: { not: "" } },
+      distinct: ["status"], select: { status: true },
+    }),
   ]);
   const regions = regionRows.map((r) => r.region);
+  // Urutan tetap active → inactive → archived (bukan alfabetis) — nilai lain
+  // yang tak dikenal jatuh di belakang
+  const DELIVERY_ORDER = ["active", "inactive", "archived"];
+  const deliveries = deliveryRows
+    .map((r) => r.status)
+    .sort((a, b) => {
+      const ia = DELIVERY_ORDER.indexOf(a);
+      const ib = DELIVERY_ORDER.indexOf(b);
+      return (ia === -1 ? DELIVERY_ORDER.length : ia) - (ib === -1 ? DELIVERY_ORDER.length : ib);
+    });
 
   // estimated: metrik Shopee (komisi/pesanan/klik) adalah hasil prorata wilayah
   return NextResponse.json({
@@ -369,6 +388,7 @@ export async function GET(request: NextRequest) {
     l1Categories: l1Rows.map((r) => r.l1Kategori),
     l3Categories: l3Rows.map((r) => r.l3Kategori),
     platforms: platformRows.map((r) => r.platform),
+    deliveries,
     estimated: !!region,
   });
 }

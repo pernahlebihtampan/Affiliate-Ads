@@ -60,6 +60,14 @@ interface AccountOption {
   name: string;
 }
 
+// Label Indonesia untuk nilai "Penayangan kampanye" Meta (MetaCampaign.status)
+// — dipakai dropdown filter Penayangan & kolom Penayangan di tabel
+const DELIVERY_LABELS: Record<string, string> = {
+  active: "Aktif",
+  inactive: "Nonaktif",
+  archived: "Arsip",
+};
+
 interface DailyDataPoint {
   date: string;
   komisi: number;
@@ -99,6 +107,9 @@ export default function DashboardPage() {
   const [tagOptions, setTagOptions] = useState<string[]>([]);
   const [regionFilter, setRegionFilter] = useState("");
   const [regions, setRegions] = useState<string[]>([]);
+  // Filter "Penayangan kampanye" Meta (active/inactive/archived)
+  const [deliveryFilter, setDeliveryFilter] = useState("");
+  const [deliveries, setDeliveries] = useState<string[]>([]);
   // Filter level-item Shopee
   const [statusFilter, setStatusFilter] = useState("");
   const [l1Filter, setL1Filter] = useState("");
@@ -129,6 +140,7 @@ export default function DashboardPage() {
       if (campaignFilter.trim()) params.set("campaign", campaignFilter.trim());
       if (tagFilter.trim()) params.set("tag", tagFilter.trim());
       if (regionFilter) params.set("region", regionFilter);
+      if (deliveryFilter) params.set("delivery", deliveryFilter);
       if (statusFilter) params.set("status", statusFilter);
       if (l1Filter) params.set("l1", l1Filter);
       if (l3Filter) params.set("l3", l3Filter);
@@ -148,6 +160,7 @@ export default function DashboardPage() {
       setL1Categories(data.l1Categories || []);
       setL3Categories(data.l3Categories || []);
       setPlatforms(data.platforms || []);
+      setDeliveries(data.deliveries || []);
 
       // Fetch daily chart data
       const dailyRes = await fetch(`/api/dashboard/daily?${params}`);
@@ -158,7 +171,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, metaAccountFilter, shopeeAccountFilter, campaignFilter, tagFilter, regionFilter, statusFilter, l1Filter, l3Filter, platformFilter, showUnlinked]);
+  }, [fromDate, toDate, metaAccountFilter, shopeeAccountFilter, campaignFilter, tagFilter, regionFilter, deliveryFilter, statusFilter, l1Filter, l3Filter, platformFilter, showUnlinked]);
 
   useEffect(() => {
     fetchData();
@@ -304,6 +317,19 @@ export default function DashboardPage() {
             widthClass="w-48"
           />
           <select
+            value={deliveryFilter}
+            onChange={(e) => setDeliveryFilter(e.target.value)}
+            className="px-3 py-1.5 border rounded-md text-sm bg-white"
+            title='Saring berdasarkan "Penayangan kampanye" Meta terkini (Aktif/Nonaktif/Arsip) — status di-update tiap import Meta'
+          >
+            <option value="">Semua penayangan</option>
+            {deliveries.map((d) => (
+              <option key={d} value={d}>
+                {DELIVERY_LABELS[d] || d}
+              </option>
+            ))}
+          </select>
+          <select
             value={regionFilter}
             onChange={(e) => setRegionFilter(e.target.value)}
             className="px-3 py-1.5 border rounded-md text-sm bg-white"
@@ -377,7 +403,7 @@ export default function DashboardPage() {
             />
             Belum tertaut
           </label>
-          {(metaAccountFilter || shopeeAccountFilter || campaignInput || tagInput || regionFilter || statusFilter || l1Filter || l3Input || platformFilter) && (
+          {(metaAccountFilter || shopeeAccountFilter || campaignInput || tagInput || regionFilter || deliveryFilter || statusFilter || l1Filter || l3Input || platformFilter) && (
             <button
               onClick={() => {
                 setMetaAccountFilter("");
@@ -387,6 +413,7 @@ export default function DashboardPage() {
                 setTagInput("");
                 setTagFilter("");
                 setRegionFilter("");
+                setDeliveryFilter("");
                 setStatusFilter("");
                 setL1Filter("");
                 setL3Input("");
@@ -411,10 +438,10 @@ export default function DashboardPage() {
               Unmapped tidak ikut tersaring (data organik tak punya sisi Meta).
             </span>
           )}
-          {showUnlinked && (metaAccountFilter || campaignFilter || regionFilter) && (
+          {showUnlinked && (metaAccountFilter || campaignFilter || regionFilter || deliveryFilter) && (
             <span className="text-xs text-muted-foreground">
               ℹ️ Baris <i>Belum tertaut</i> disembunyikan saat filter akun Meta /
-              kampanye / wilayah aktif (tidak punya sisi Meta).
+              kampanye / wilayah / penayangan aktif (tidak punya sisi Meta).
             </span>
           )}
           {(statusFilter || l1Filter || l3Filter || platformFilter) && (
@@ -488,7 +515,7 @@ export default function DashboardPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b">
-                  <SortableTh label="On/Off" sortKeyName="metaCampaignStatus" align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortableTh label="Penayangan" sortKeyName="metaCampaignStatus" align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortableTh label="Kampanye Meta" sortKeyName="metaCampaignName" align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortableTh label="Akun" sortKeyName="metaAccountName" align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortableTh label="Tag Shopee" sortKeyName="shopeeCampaignName" align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
@@ -719,13 +746,13 @@ function FilterCombobox({
   );
 }
 
-// Indikator on/off kampanye Meta (read-only) — dari "Penayangan kampanye":
-// active = ON hijau; inactive = OFF abu-abu; archived = saklar kosong
+// Indikator "Penayangan kampanye" Meta (read-only):
+// active = Aktif hijau; inactive = Nonaktif abu-abu; archived = saklar kosong
 // (tanpa knob — bukan lagi on/off, kampanyenya sudah diarsipkan)
 function StatusIndicator({ status }: { status: string }) {
   const isOn = status === "active";
   const isArchived = status === "archived";
-  const label = isOn ? "On" : isArchived ? "Arsip" : "Off";
+  const label = DELIVERY_LABELS[status] || "Nonaktif";
   return (
     <span
       title={`Penayangan kampanye: ${status || "tidak diketahui"}`}

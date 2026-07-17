@@ -53,6 +53,8 @@ export async function GET(request: NextRequest) {
   const l1Filter = url.searchParams.get("l1") || "";
   const l3Filter = url.searchParams.get("l3") || "";
   const platformFilter = url.searchParams.get("platform") || "";
+  // Filter sisi Meta: "Penayangan kampanye" terkini — sama dengan /api/dashboard
+  const deliveryFilter = url.searchParams.get("delivery") || "";
 
   const dateFilter = dateRange(fromDate, toDate);
   const clickFilter = clickRange(fromDate, toDate);
@@ -95,6 +97,7 @@ export async function GET(request: NextRequest) {
     // Exact match case-insensitive — nilai dikirim UI dari pilihan dropdown
     if (campaignQuery && h.metaCampaign.name.toLowerCase() !== campaignQuery) return false;
     if (tagQuery && h.shopeeCampaign.name.toLowerCase() !== tagQuery) return false;
+    if (deliveryFilter && h.metaCampaign.status !== deliveryFilter) return false;
     return true;
   });
 
@@ -137,7 +140,8 @@ export async function GET(request: NextRequest) {
   // dicocokkan/diprorata) atau toggle UI dimatikan (`unlinked=0`); filter tag
   // exact match diterapkan.
   const includeUnlinked = url.searchParams.get("unlinked") !== "0";
-  const showUnlinked = includeUnlinked && !metaAdAccountId && !campaignQuery && !region;
+  const showUnlinked =
+    includeUnlinked && !metaAdAccountId && !campaignQuery && !region && !deliveryFilter;
   const unlinkedCampaigns = showUnlinked
     ? (
         await prisma.shopeeCampaign.findMany({
