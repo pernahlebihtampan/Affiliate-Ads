@@ -28,7 +28,7 @@ export default function SettingsPage() {
           return;
         }
       } catch {
-        // server masih down — coba lagi
+        // server masih down, coba lagi
       }
       setTimeout(tick, 1500);
     };

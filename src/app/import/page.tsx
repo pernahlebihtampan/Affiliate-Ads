@@ -8,7 +8,7 @@ import type { MetaAdRow, ShopeeClickRow, ShopeeCommissionRow } from "@/lib/csv-p
 
 type ImportType = "meta" | "shopee_click" | "shopee_commission";
 
-// Baris preview bisa berasal dari salah satu dari tiga parser — gabungkan sebagai Partial.
+// Baris preview bisa berasal dari salah satu dari tiga parser, gabungkan sebagai Partial.
 type PreviewRow = Partial<MetaAdRow & ShopeeClickRow & ShopeeCommissionRow>;
 
 interface ImportResultResponse {
@@ -72,7 +72,7 @@ export default function ImportPage() {
     fetchAccounts();
   }, [fetchAccounts]);
 
-  // Pantau progres impor server selama halaman terbuka — menangkap juga impor
+  // Pantau progres impor server selama halaman terbuka, menangkap juga impor
   // yang dimulai dari tab/komputer lain, atau yang masih berjalan saat halaman
   // di-refresh. State `progress` hanya terisi saat ada impor aktif.
   useEffect(() => {
@@ -88,7 +88,7 @@ export default function ImportPage() {
         const p: ImportProgress | null = await res.json();
         if (!stopped) setProgress(p?.active ? p : null);
       } catch {
-        // server sibuk / timeout — coba lagi di tick berikutnya
+        // server sibuk / timeout, coba lagi di tick berikutnya
       } finally {
         inFlight = false;
       }
@@ -141,7 +141,7 @@ export default function ImportPage() {
   };
 
   // Kalau koneksi POST putus (mis. sistem berat), impor server bisa tetap
-  // berjalan — pantau progres sampai selesai alih-alih langsung bilang gagal.
+  // berjalan, pantau progres sampai selesai alih-alih langsung bilang gagal.
   // (Tampilan progress bar diurus poll global; di sini cukup tunggu selesai.)
   const waitForImportToFinish = async (
     fileName: string
@@ -168,7 +168,7 @@ export default function ImportPage() {
 
     setImporting(true);
     setResult(null);
-    // Deteksi POST menggantung: koneksi bisa mati diam-diam (tanpa error) —
+    // Deteksi POST menggantung: koneksi bisa mati diam-diam (tanpa error),
     // bila impor file ini sudah terlihat aktif lalu selesai di server tapi
     // respons POST tak kunjung tiba, batalkan fetch supaya alur catch di bawah
     // mengambil hasil akhir dari progres server (tombol tidak macet selamanya).
@@ -186,14 +186,14 @@ export default function ImportPage() {
           setTimeout(() => abortCtrl.abort(), 8000); // beri waktu respons normal tiba dulu
         }
       } catch {
-        // server sibuk — biarkan, coba lagi di tick berikutnya
+        // server sibuk, biarkan, coba lagi di tick berikutnya
       }
     }, 2000);
     try {
       const formData = new FormData();
       formData.set("file", file);
       formData.set("accountId", String(selectedAccountId));
-      // Multipart upload tidak membawa lastModified — kirim eksplisit agar
+      // Multipart upload tidak membawa lastModified, kirim eksplisit agar
       // server bisa menolak file yang sama/lebih lawas dari import sebelumnya.
       formData.set("fileLastModified", String(file.lastModified));
       formData.set("fileSize", String(file.size));
@@ -434,7 +434,7 @@ export default function ImportPage() {
           </button>
         )}
 
-        {/* Progress — muncul SEKETIKA tombol diklik (bar indeterminate), tidak
+        {/* Progress, muncul SEKETIKA tombol diklik (bar indeterminate), tidak
             menunggu poll server. Beralih ke persen nyata begitu server melapor.
             Juga menangkap impor aktif dari tab/komputer lain. */}
         {(importing || progress) && (
@@ -443,7 +443,7 @@ export default function ImportPage() {
               {typeLabels[(progress?.type as ImportType) ?? importType] ??
                 progress?.type}{" "}
               · {progress?.fileName ?? file?.name}
-              {!importing && progress && " — impor berjalan dari sesi lain, dipantau di sini"}
+              {!importing && progress && ", impor berjalan dari sesi lain, dipantau di sini"}
             </p>
             <div className="flex justify-between text-sm">
               <span>

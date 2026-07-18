@@ -57,7 +57,7 @@ function emptyAcc(): RegionAcc {
 
 // Performa per Wilayah Meta. Komisi Shopee TIDAK punya dimensi wilayah, jadi
 // komisi tiap (kampanye, tanggal klik) di-PRORATA ke wilayah mengikuti porsi
-// spend wilayah pada tanggal itu — sama seperti filter wilayah di /api/dashboard,
+// spend wilayah pada tanggal itu. Sama seperti filter wilayah di /api/dashboard,
 // tapi dihitung untuk SEMUA wilayah sekaligus. Hanya kampanye yang sudah
 // tertaut di Campaign Hub yang dihitung (tanpa tautan tidak ada komisi yang
 // bisa diatribusikan).
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
     : undefined;
   const campaignQuery = url.searchParams.get("campaign")?.trim().toLowerCase() || "";
   const deliveryFilter = url.searchParams.get("delivery") || "";
-  // Filter level-item Shopee (L1 kategori & platform) — hanya menyaring sisi
+  // Filter level-item Shopee (L1 kategori & platform) hanya menyaring sisi
   // komisi/pesanan; spend Meta tetap penuh (ROAS per wilayah turun, tapi
   // perbandingan antar-wilayah tetap bermakna)
   const l1Filter = url.searchParams.get("l1") || "";
@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  // Opsi dropdown kampanye — dari hub yang punya data di rentang terpilih,
+  // Opsi dropdown kampanye dari hub yang punya data di rentang terpilih,
   // SEBELUM filter akun/kampanye diterapkan agar list tetap lengkap.
   const campaignOptions = [
     ...new Set(
@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
     }
     return a;
   };
-  // Komisi hub tanpa spend sama sekali di rentang — tidak bisa diatribusikan
+  // Komisi hub tanpa spend sama sekali di rentang tidak bisa diatribusikan
   // ke wilayah mana pun; dilaporkan terpisah supaya user tahu ada selisih
   // dengan total komisi dashboard.
   let komisiTanpaSpend = 0;
@@ -196,7 +196,7 @@ export async function GET(request: NextRequest) {
 
     // Distribusikan tiap bucket tanggal ke wilayah sesuai porsi spend hari
     // itu; hari tanpa spend / klik tanpa tanggal memakai porsi level periode
-    // — supaya Σ semua wilayah = total komisi hub (tidak ada yang hilang).
+    // supaya Σ semua wilayah = total komisi hub (tidak ada yang hilang).
     for (const [k, day] of byDate) {
       const dayTotal = k !== null ? totalSpendByDate.get(k) || 0 : 0;
       const usePeriod = dayTotal <= 0;

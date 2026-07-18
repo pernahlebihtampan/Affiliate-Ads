@@ -8,7 +8,7 @@ import {
 } from "@/lib/import-progress";
 
 export async function POST(request: NextRequest) {
-  // Slot progres tunggal — tolak impor baru selama impor lain masih berjalan
+  // Slot progres tunggal tolak impor baru selama impor lain masih berjalan
   // (mis. dari komputer/tab lain). Harus SEBELUM try/finally di bawah, karena
   // finally-nya akan mematikan progres impor yang sedang berjalan itu.
   const running = getImportProgress();

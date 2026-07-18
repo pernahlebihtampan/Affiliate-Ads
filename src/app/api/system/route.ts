@@ -4,8 +4,8 @@ import { promisify } from "node:util";
 
 // Kontrol proses untuk operator awam: Restart & Update via systemd (mirip
 // shopee-automation). Bedanya app ini jalan mode PRODUKSI, jadi keduanya harus
-// build ulang sebelum restart bermakna. "Update" menarik kode dari GitHub dulu;
-// "Restart" build dari kode yang sudah ada di komputer server — dipakai selama
+// build ulang sebelum restart bermakna. "Update" menarik kode dari GitHub dulu.
+// "Restart" build dari kode yang sudah ada di komputer server dipakai selama
 // coding masih dilakukan langsung di mesin server (belum lewat GitHub). Kedua
 // aksi selalu dieksekusi di mesin server, dari perangkat mana pun tombolnya
 // diklik.
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
 
   if (action === "restart") {
     // Build dari source lokal (tanpa git pull / npm install). Jika build
-    // gagal, JANGAN restart — biar versi lama tetap jalan.
+    // gagal, JANGAN restart biar versi lama tetap jalan.
     const log: string[] = [];
     const build = await run(NPM, ["run", "build"]);
     log.push("$ npm run build\n" + build.out);
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
   if (action === "update") {
     const log: string[] = [];
 
-    // 1) Tarik kode terbaru dari GitHub (fast-forward saja — hindari merge tak terduga).
+    // 1) Tarik kode terbaru dari GitHub (fast-forward saja hindari merge tak terduga).
     const pull = await run(GIT, ["pull", "--ff-only"]);
     log.push("$ git pull --ff-only\n" + pull.out);
     if (!pull.ok) {
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2) Sinkronkan dependency. Paksa sertakan devDependencies — service jalan
+    // 2) Sinkronkan dependency. Paksa sertakan devDependencies service jalan
     //    NODE_ENV=production yang secara default membuang dev deps (typescript,
     //    tailwind) sehingga build gagal.
     const install = await run(
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3) Build produksi. Jika gagal, JANGAN restart — biar versi lama tetap jalan.
+    // 3) Build produksi. Jika gagal, JANGAN restart biar versi lama tetap jalan.
     const build = await run(NPM, ["run", "build"]);
     log.push("$ npm run build\n" + build.out);
     if (!build.ok) {

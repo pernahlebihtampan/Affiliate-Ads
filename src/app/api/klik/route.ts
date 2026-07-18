@@ -21,13 +21,13 @@ function emptyBucket(): BucketAgg {
   return { klik: 0, pesanan: 0, komisi: 0 };
 }
 
-// Performa Klik — analisis data ShopeeClick (1 baris CSV = 1 klik) per
+// Performa Klik analisis data ShopeeClick (1 baris CSV = 1 klik) per
 // tanggal, jam WIB, tag, perujuk, dan negara, disandingkan dengan pesanan &
 // komisi ShopeeOrderItem pada bucket yang sama (via tanggal/jam klik item).
 // Kosakata `ShopeeClick.perujuk` = `ShopeeOrderItem.platform` (Facebook,
 // Instagram, Shopeevideo-Shopee, …) sehingga konversi per perujuk bisa
 // dihitung. Data klik hanya mencakup beberapa hari (CSV klik Shopee terbatas)
-// — bila from/to tidak dikirim, rentang default = cakupan data klik supaya
+// bila from/to tidak dikirim, rentang default = cakupan data klik supaya
 // CR/EPC tidak menyesatkan.
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
   const accountWhere = shopeeAccountId ? { shopeeAccountId } : {};
 
-  // Cakupan data klik (per akun bila difilter) — dipakai sebagai rentang
+  // Cakupan data klik (per akun bila difilter) dipakai sebagai rentang
   // default dan ditampilkan di UI sebagai peringatan cakupan
   const [minRow, maxRow] = await Promise.all([
     prisma.shopeeClick.findFirst({
@@ -191,7 +191,7 @@ export async function GET(request: NextRequest) {
     }, emptyBucket())
   );
 
-  // Opsi dropdown — dihitung TANPA filter tag/perujuk (hanya akun) supaya
+  // Opsi dropdown dihitung TANPA filter tag/perujuk (hanya akun) supaya
   // daftar tetap lengkap saat salah satu filter sedang aktif
   const [tagRows, perujukRows] = await Promise.all([
     prisma.shopeeClick.findMany({

@@ -49,7 +49,7 @@ export default function KlikPage() {
   const [byNegara, setByNegara] = useState<NegaraRow[]>([]);
   const [coverage, setCoverage] = useState<{ from: string; to: string } | null>(null);
   const [loading, setLoading] = useState(true);
-  // Rentang awal dikosongkan — API men-default ke cakupan data klik (CSV klik
+  // Rentang awal dikosongkan, API men-default ke cakupan data klik (CSV klik
   // Shopee hanya beberapa hari) dan input diisi dari respons pertama, supaya
   // CR/EPC tidak dihitung dari rentang tanpa data klik.
   const [fromDate, setFromDate] = useState("");
@@ -80,7 +80,7 @@ export default function KlikPage() {
       setByPerujuk(data.byPerujuk || []);
       setByNegara(data.byNegara || []);
       setCoverage(data.coverage);
-      // Opsi dropdown dihitung API tanpa filter tag/perujuk — tidak menyusut
+      // Opsi dropdown dihitung API tanpa filter tag/perujuk, tidak menyusut
       // saat salah satu filter aktif
       setTagOptions(data.tagOptions || []);
       setPerujukOptions(data.perujukOptions || []);
@@ -206,7 +206,7 @@ export default function KlikPage() {
               <b>
                 {coverage.from} s/d {coverage.to}
               </b>{" "}
-              (CSV klik Shopee terbatas) — rentang default mengikuti cakupan
+              (CSV klik Shopee terbatas), rentang default mengikuti cakupan
               ini. Memilih rentang di luar itu membuat CR/EPC menyesatkan
               (pesanan ada, kliknya tidak tercatat).
             </span>
@@ -229,7 +229,7 @@ export default function KlikPage() {
                 const organik =
                   byTag.find((r) => r.tag === "(Organik / tanpa tag)")?.komisi || 0;
                 return organik > 0
-                  ? `semua sumber — termasuk organik ${formatCurrency(organik)}`
+                  ? `semua sumber, termasuk organik ${formatCurrency(organik)}`
                   : "semua sumber trafik Shopee";
               })()}
             />
@@ -347,7 +347,7 @@ function NegaraTable({ rows }: { rows: NegaraRow[] }) {
       <div className="p-3 border-b">
         <h3 className="text-sm font-medium">Per Negara</h3>
         <p className="text-xs text-muted-foreground mt-0.5">
-          &quot;Wilayah Klik&quot; di CSV Shopee = negara (bukan provinsi) —
+          &quot;Wilayah Klik&quot; di CSV Shopee = negara (bukan provinsi),
           pesanan tidak punya dimensi ini
         </p>
       </div>
@@ -384,7 +384,7 @@ function SummaryCard({
 }: {
   label: string;
   value: string;
-  // Keterangan cakupan angka — pengingat bahwa card serupa di halaman lain
+  // Keterangan cakupan angka, pengingat bahwa card serupa di halaman lain
   // menghitung cakupan berbeda
   sub?: string;
 }) {

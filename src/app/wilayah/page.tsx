@@ -48,7 +48,7 @@ const DELIVERY_LABELS: Record<string, string> = {
 };
 
 // Baris legacy hasil agregasi lama (region = "") tidak bisa direkomendasikan
-// — tidak menunjuk provinsi mana pun di penargetan Meta
+//, tidak menunjuk provinsi mana pun di penargetan Meta
 const NO_REGION_LABEL = "(Tanpa rincian wilayah)";
 const regionLabel = (r: string) => r || NO_REGION_LABEL;
 
@@ -75,7 +75,7 @@ export default function WilayahPage() {
   const [l1Categories, setL1Categories] = useState<string[]>([]);
   const [platformFilter, setPlatformFilter] = useState("");
   const [platforms, setPlatforms] = useState<string[]>([]);
-  // Ambang rekomendasi. minSpendInput "" = otomatis (1% total spend) —
+  // Ambang rekomendasi. minSpendInput "" = otomatis (1% total spend)
   // placeholder input menampilkan nilai otomatisnya.
   const [minSpendInput, setMinSpendInput] = useState("");
   const [breakEven, setBreakEven] = useState("1");
@@ -123,7 +123,7 @@ export default function WilayahPage() {
   }, []);
 
   // Ambang efektif: input user, atau otomatis 1% total spend (dibulatkan ke
-  // ribuan) — wilayah di bawahnya dianggap belum cukup data untuk dinilai
+  // ribuan), wilayah di bawahnya dianggap belum cukup data untuk dinilai
   const autoMinSpend = useMemo(() => {
     if (!totals || totals.spend <= 0) return 0;
     return Math.max(Math.round((totals.spend * 0.01) / 1000) * 1000, 1000);
@@ -139,7 +139,7 @@ export default function WilayahPage() {
     [minSpend, breakEvenNum]
   );
 
-  // Wilayah "" dikecualikan dari daftar salin — bukan provinsi yang bisa
+  // Wilayah "" dikecualikan dari daftar salin, bukan provinsi yang bisa
   // dipilih di penargetan Meta
   const daftarBaik = useMemo(
     () =>
@@ -289,7 +289,7 @@ export default function WilayahPage() {
             value={l1Filter}
             onChange={(e) => setL1Filter(e.target.value)}
             className="px-3 py-1.5 border rounded-md text-sm bg-white max-w-48"
-            title="Saring komisi & pesanan Shopee berdasarkan L1 kategori produk — spend Meta tetap penuh"
+            title="Saring komisi & pesanan Shopee berdasarkan L1 kategori produk, spend Meta tetap penuh"
           >
             <option value="">Semua L1 kategori</option>
             {l1Categories.map((c) => (
@@ -302,7 +302,7 @@ export default function WilayahPage() {
             value={platformFilter}
             onChange={(e) => setPlatformFilter(e.target.value)}
             className="px-3 py-1.5 border rounded-md text-sm bg-white"
-            title="Saring komisi & pesanan Shopee berdasarkan platform pesanan — spend Meta tetap penuh"
+            title="Saring komisi & pesanan Shopee berdasarkan platform pesanan, spend Meta tetap penuh"
           >
             <option value="">Semua platform</option>
             {platforms.map((p) => (
@@ -335,13 +335,13 @@ export default function WilayahPage() {
             />
           </label>
           <span className="text-xs text-muted-foreground basis-full">
-            ± Komisi Shopee tidak punya dimensi wilayah — komisi tiap kampanye
+            ± Komisi Shopee tidak punya dimensi wilayah, komisi tiap kampanye
             di-<b>prorata</b> ke wilayah mengikuti porsi spend per tanggal klik
             (estimasi). Hanya kampanye yang tertaut di Campaign Hub yang dihitung.
           </span>
           {(l1Filter || platformFilter) && (
             <span className="text-xs text-muted-foreground basis-full">
-              ℹ️ Filter kategori/platform hanya menyaring komisi & pesanan Shopee —
+              ℹ️ Filter kategori/platform hanya menyaring komisi & pesanan Shopee,
               spend Meta tetap penuh, jadi ROAS/keuntungan per wilayah turun;
               bandingkan antar-wilayah, bukan angka absolutnya.
             </span>
@@ -386,7 +386,7 @@ export default function WilayahPage() {
           <div className="grid md:grid-cols-2 gap-4">
             <RekomendasiPanel
               title="✅ Layak ditarget"
-              subtitle={`ROAS ≥ ${breakEvenNum} dengan spend ≥ ${formatCurrency(minSpend)} — urut dari paling untung`}
+              subtitle={`ROAS ≥ ${breakEvenNum} dengan spend ≥ ${formatCurrency(minSpend)}, urut dari paling untung`}
               list={daftarBaik}
               chipClass="bg-green-50 text-green-700 border-green-200"
               copied={copied === "baik"}
@@ -394,7 +394,7 @@ export default function WilayahPage() {
             />
             <RekomendasiPanel
               title="⛔ Sebaiknya dikecualikan"
-              subtitle={`ROAS < ${breakEvenNum} dengan spend ≥ ${formatCurrency(minSpend)} — urut dari paling rugi`}
+              subtitle={`ROAS < ${breakEvenNum} dengan spend ≥ ${formatCurrency(minSpend)}, urut dari paling rugi`}
               list={daftarHindari}
               chipClass="bg-red-50 text-red-700 border-red-200"
               copied={copied === "hindari"}
@@ -610,7 +610,7 @@ function RekomendasiBadge({ jenis }: { jenis: Rekomendasi }) {
   return (
     <span
       className="px-2 py-0.5 rounded text-xs font-medium text-gray-600 bg-gray-100"
-      title="Spend di bawah ambang minimum — belum cukup data untuk dinilai"
+      title="Spend di bawah ambang minimum, belum cukup data untuk dinilai"
     >
       • Data kurang
     </span>
@@ -658,7 +658,7 @@ function SummaryCard({
   label: string;
   value: string;
   colorClass?: string;
-  // Keterangan cakupan angka — pengingat bahwa card serupa di halaman lain
+  // Keterangan cakupan angka, pengingat bahwa card serupa di halaman lain
   // menghitung cakupan berbeda
   sub?: string;
 }) {

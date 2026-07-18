@@ -62,7 +62,7 @@ interface AccountOption {
 }
 
 // Label Indonesia untuk nilai "Penayangan kampanye" Meta (MetaCampaign.status)
-// — dipakai dropdown filter Penayangan & kolom Penayangan di tabel
+// dipakai dropdown filter Penayangan & kolom Penayangan di tabel
 const DELIVERY_LABELS: Record<string, string> = {
   active: "Aktif",
   inactive: "Nonaktif",
@@ -82,7 +82,7 @@ export default function DashboardPage() {
   const [rows, setRows] = useState<DashboardRow[]>([]);
   const [totals, setTotals] = useState<Totals | null>(null);
   // Spend kampanye Meta yang belum ditautkan di Campaign Hub (tidak masuk
-  // totals — hanya catatan di bawah summary cards)
+  // totals, hanya catatan di bawah summary cards)
   const [spendTanpaTautan, setSpendTanpaTautan] = useState({ spend: 0, campaigns: 0 });
   const [organic, setOrganic] = useState<OrganicStats | null>(null);
   const [dailyData, setDailyData] = useState<DailyDataPoint[]>([]);
@@ -96,9 +96,9 @@ export default function DashboardPage() {
   // Filter opsional. campaignInput/tagInput = teks ketikan (hanya membuka
   // dropdown saran, TIDAK memicu fetch); *Filter di-set saat item dipilih
   // dari dropdown → baru reload data (exact match satu kampanye/tag).
-  // campaignInput & tagInput saling eksklusif — mengisi satu menonaktifkan
+  // campaignInput & tagInput saling eksklusif, mengisi satu menonaktifkan
   // yang lain (dua sisi dari tautan hub yang sama).
-  // Filter akun (exact by id, dari master di /api/accounts — dimuat sekali)
+  // Filter akun (exact by id, dari master di /api/accounts, dimuat sekali)
   const [metaAccountFilter, setMetaAccountFilter] = useState("");
   const [shopeeAccountFilter, setShopeeAccountFilter] = useState("");
   const [metaAccounts, setMetaAccounts] = useState<AccountOption[]>([]);
@@ -117,12 +117,12 @@ export default function DashboardPage() {
   // Filter level-item Shopee
   const [statusFilter, setStatusFilter] = useState("");
   const [l1Filter, setL1Filter] = useState("");
-  // L3: input bebas + datalist (kategori di rentang tanggal) — substring, di-debounce
+  // L3: input bebas + datalist (kategori di rentang tanggal), substring, di-debounce
   const [l3Input, setL3Input] = useState("");
   const [l3Filter, setL3Filter] = useState("");
   const [platformFilter, setPlatformFilter] = useState("");
   // Toggle baris "Belum tertaut" (kampanye Shopee bertag tanpa hub). Bukan
-  // filter data — hanya mode tampilan, jadi tidak ikut "Bersihkan filter".
+  // filter data, hanya mode tampilan, jadi tidak ikut "Bersihkan filter".
   // Dikirim ke API (unlinked=0) agar totals & grafik konsisten dengan tabel.
   const [showUnlinked, setShowUnlinked] = useState(true);
   const [statuses, setStatuses] = useState<string[]>([]);
@@ -182,7 +182,7 @@ export default function DashboardPage() {
     fetchData();
   }, [fetchData]);
 
-  // Master akun untuk dropdown filter — dimuat sekali saat halaman dibuka
+  // Master akun untuk dropdown filter, dimuat sekali saat halaman dibuka
   useEffect(() => {
     fetch("/api/accounts")
       .then((res) => res.json())
@@ -302,7 +302,7 @@ export default function DashboardPage() {
             }}
             disabled={!!tagInput}
             placeholder="Filter nama kampanye Meta…"
-            title={tagInput ? "Nonaktif — sedang memfilter Tag Shopee (kedua filter menyaring pasangan hub yang sama)" : undefined}
+            title={tagInput ? "Nonaktif, sedang memfilter Tag Shopee (kedua filter menyaring pasangan hub yang sama)" : undefined}
             widthClass="w-56"
           />
           <FilterCombobox
@@ -318,14 +318,14 @@ export default function DashboardPage() {
             }}
             disabled={!!campaignInput}
             placeholder="Filter Tag Shopee…"
-            title={campaignInput ? "Nonaktif — sedang memfilter nama kampanye Meta (kedua filter menyaring pasangan hub yang sama)" : undefined}
+            title={campaignInput ? "Nonaktif, sedang memfilter nama kampanye Meta (kedua filter menyaring pasangan hub yang sama)" : undefined}
             widthClass="w-48"
           />
           <select
             value={deliveryFilter}
             onChange={(e) => setDeliveryFilter(e.target.value)}
             className="px-3 py-1.5 border rounded-md text-sm bg-white"
-            title='Saring berdasarkan "Penayangan kampanye" Meta terkini (Aktif/Nonaktif/Arsip) — status di-update tiap import Meta'
+            title='Saring berdasarkan "Penayangan kampanye" Meta terkini (Aktif/Nonaktif/Arsip), status di-update tiap import Meta'
           >
             <option value="">Semua penayangan</option>
             {deliveries.map((d) => (
@@ -439,7 +439,7 @@ export default function DashboardPage() {
           )}
           {metaAccountFilter && (
             <span className="text-xs text-muted-foreground">
-              ℹ️ Filter akun Meta hanya menyaring pasangan hub — panel Organik /
+              ℹ️ Filter akun Meta hanya menyaring pasangan hub, panel Organik /
               Unmapped tidak ikut tersaring (data organik tak punya sisi Meta).
             </span>
           )}
@@ -452,7 +452,7 @@ export default function DashboardPage() {
           {(statusFilter || l1Filter || l3Filter || platformFilter) && (
             <span className="text-xs text-muted-foreground">
               ℹ️ Filter status/kategori/platform hanya menyaring komisi & pesanan
-              Shopee — spend Meta tetap penuh, jadi ROAS turun.
+              Shopee, spend Meta tetap penuh, jadi ROAS turun.
             </span>
           )}
         </div>
@@ -466,7 +466,7 @@ export default function DashboardPage() {
               value={(regionFilter ? "±" : "") + formatCurrency(totals.totalKomisi)}
               sub={
                 organic && organic.totalKomisi > 0
-                  ? `kampanye ter-mapping — belum termasuk organik ${formatCurrency(organic.totalKomisi)}`
+                  ? `kampanye ter-mapping, belum termasuk organik ${formatCurrency(organic.totalKomisi)}`
                   : "kampanye ter-mapping saja"
               }
             />
@@ -486,7 +486,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Catatan spend Meta belum tertaut — tidak masuk totals di atas */}
+        {/* Catatan spend Meta belum tertaut, tidak masuk totals di atas */}
         {totals && spendTanpaTautan.spend > 0 && (
           <p className="text-xs text-muted-foreground -mt-3">
             ℹ️ Ada <b>{formatCurrency(spendTanpaTautan.spend)}</b> spend dari{" "}
@@ -494,7 +494,7 @@ export default function DashboardPage() {
             <a href="/campaign-hub" className="text-primary hover:underline">
               Campaign Hub
             </a>{" "}
-            — tidak termasuk angka di atas. Keuntungan setelah dikurangi spend
+            tidak termasuk angka di atas. Keuntungan setelah dikurangi spend
             ini ≈{" "}
             <b>
               {(regionFilter ? "±" : "") +
@@ -592,7 +592,7 @@ export default function DashboardPage() {
                         {row.metaCampaignId === null ? (
                           <a
                             href="/campaign-hub"
-                            title="Kampanye Shopee ini belum ditautkan ke kampanye Meta — tautkan di Campaign Hub"
+                            title="Kampanye Shopee ini belum ditautkan ke kampanye Meta, tautkan di Campaign Hub"
                             className="text-muted-foreground italic hover:underline"
                           >
                             Belum tertaut
@@ -688,7 +688,7 @@ export default function DashboardPage() {
 }
 
 // Input filter dengan dropdown saran. Mengetik/paste HANYA membuka list
-// (walau hasil cuma satu; kosong → item "Tidak ditemukan") — data baru
+// (walau hasil cuma satu; kosong → item "Tidak ditemukan"), data baru
 // di-reload setelah item dipilih (klik / Enter), via onSelect.
 function FilterCombobox({
   value,
@@ -781,7 +781,7 @@ function FilterCombobox({
 
 // Indikator "Penayangan kampanye" Meta (read-only):
 // active = Aktif hijau; inactive = Nonaktif abu-abu; archived = saklar kosong
-// (tanpa knob — bukan lagi on/off, kampanyenya sudah diarsipkan)
+// (tanpa knob, bukan lagi on/off, kampanyenya sudah diarsipkan)
 function StatusIndicator({ status }: { status: string }) {
   const isOn = status === "active";
   const isArchived = status === "archived";
@@ -852,7 +852,7 @@ function SummaryCard({
   label: string;
   value: string;
   colorClass?: string;
-  // Keterangan cakupan angka (mis. "belum termasuk organik …") — pengingat
+  // Keterangan cakupan angka (mis. "belum termasuk organik …"), pengingat
   // bahwa card serupa di halaman lain menghitung cakupan berbeda
   sub?: string;
 }) {
