@@ -222,7 +222,17 @@ export default function KlikPage() {
               label="Konversi (CR)"
               value={(totals.cr * 100).toFixed(2) + "%"}
             />
-            <SummaryCard label="Komisi" value={formatCurrency(totals.komisi)} />
+            <SummaryCard
+              label="Komisi"
+              value={formatCurrency(totals.komisi)}
+              sub={(() => {
+                const organik =
+                  byTag.find((r) => r.tag === "(Organik / tanpa tag)")?.komisi || 0;
+                return organik > 0
+                  ? `semua sumber — termasuk organik ${formatCurrency(organik)}`
+                  : "semua sumber trafik Shopee";
+              })()}
+            />
             <SummaryCard
               label="EPC (komisi / klik)"
               value={formatCurrency(totals.epc)}
@@ -367,11 +377,22 @@ function NegaraTable({ rows }: { rows: NegaraRow[] }) {
   );
 }
 
-function SummaryCard({ label, value }: { label: string; value: string }) {
+function SummaryCard({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  // Keterangan cakupan angka — pengingat bahwa card serupa di halaman lain
+  // menghitung cakupan berbeda
+  sub?: string;
+}) {
   return (
     <div className="bg-white rounded-lg border p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-lg font-semibold mt-1">{value}</p>
+      {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
     </div>
   );
 }

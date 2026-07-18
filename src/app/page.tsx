@@ -464,6 +464,11 @@ export default function DashboardPage() {
             <SummaryCard
               label={regionFilter ? "Total Komisi (estimasi)" : "Total Komisi"}
               value={(regionFilter ? "±" : "") + formatCurrency(totals.totalKomisi)}
+              sub={
+                organic && organic.totalKomisi > 0
+                  ? `kampanye ter-mapping — belum termasuk organik ${formatCurrency(organic.totalKomisi)}`
+                  : "kampanye ter-mapping saja"
+              }
             />
             <SummaryCard
               label={regionFilter ? "Keuntungan (estimasi)" : "Keuntungan"}
@@ -842,15 +847,20 @@ function SummaryCard({
   label,
   value,
   colorClass,
+  sub,
 }: {
   label: string;
   value: string;
   colorClass?: string;
+  // Keterangan cakupan angka (mis. "belum termasuk organik …") — pengingat
+  // bahwa card serupa di halaman lain menghitung cakupan berbeda
+  sub?: string;
 }) {
   return (
     <div className="bg-white rounded-lg border p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className={`text-lg font-semibold mt-1 ${colorClass || ""}`}>{value}</p>
+      {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
     </div>
   );
 }

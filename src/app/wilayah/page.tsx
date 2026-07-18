@@ -362,6 +362,7 @@ export default function WilayahPage() {
             <SummaryCard
               label="Total Komisi (estimasi)"
               value={"±" + formatCurrency(totals.totalKomisi)}
+              sub="hanya kampanye tertaut & punya spend Meta di rentang"
             />
             <SummaryCard
               label="Keuntungan (estimasi)"
@@ -652,15 +653,20 @@ function SummaryCard({
   label,
   value,
   colorClass,
+  sub,
 }: {
   label: string;
   value: string;
   colorClass?: string;
+  // Keterangan cakupan angka — pengingat bahwa card serupa di halaman lain
+  // menghitung cakupan berbeda
+  sub?: string;
 }) {
   return (
     <div className="bg-white rounded-lg border p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className={`text-lg font-semibold mt-1 ${colorClass || ""}`}>{value}</p>
+      {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
     </div>
   );
 }
