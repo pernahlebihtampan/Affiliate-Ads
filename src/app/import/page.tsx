@@ -72,6 +72,28 @@ export default function ImportPage() {
     fetchAccounts();
   }, [fetchAccounts]);
 
+  // Pantau progres impor server selama halaman terbuka — menangkap juga impor
+  // yang dimulai dari tab/komputer lain, atau yang masih berjalan saat halaman
+  // di-refresh. State `progress` hanya terisi saat ada impor aktif.
+  useEffect(() => {
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const res = await fetch("/api/import/progress");
+        const p: ImportProgress | null = await res.json();
+        if (!stopped) setProgress(p?.active ? p : null);
+      } catch {
+        // server sibuk — coba lagi di tick berikutnya
+      }
+    };
+    tick();
+    const timer = setInterval(tick, 1500);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, []);
+
   const getAccountsForType = () => {
     if (importType === "meta") return accounts.meta;
     return accounts.shopee;
@@ -111,6 +133,7 @@ export default function ImportPage() {
 
   // Kalau koneksi POST putus (mis. sistem berat), impor server bisa tetap
   // berjalan — pantau progres sampai selesai alih-alih langsung bilang gagal.
+  // (Tampilan progress bar diurus poll global; di sini cukup tunggu selesai.)
   const waitForImportToFinish = async (
     fileName: string
   ): Promise<ImportProgress | null> => {
@@ -121,7 +144,6 @@ export default function ImportPage() {
         const p = await fetchProgress();
         if (!p || p.fileName !== fileName) return null;
         if (!p.active) return p;
-        setProgress(p);
         consecutiveErrors = 0;
       } catch {
         if (++consecutiveErrors >= 30) return null;
@@ -136,15 +158,28 @@ export default function ImportPage() {
     }
 
     setImporting(true);
-    setProgress(null);
+    setResult(null);
+    // Deteksi POST menggantung: koneksi bisa mati diam-diam (tanpa error) —
+    // bila impor file ini sudah terlihat aktif lalu selesai di server tapi
+    // respons POST tak kunjung tiba, batalkan fetch supaya alur catch di bawah
+    // mengambil hasil akhir dari progres server (tombol tidak macet selamanya).
+    const abortCtrl = new AbortController();
+    let seenActive = false;
+    let abortScheduled = false;
     const pollTimer = setInterval(async () => {
       try {
         const p = await fetchProgress();
-        if (p?.active) setProgress(p);
+        if (!p || p.fileName !== file.name) return;
+        if (p.active) {
+          seenActive = true;
+        } else if (seenActive && !abortScheduled) {
+          abortScheduled = true;
+          setTimeout(() => abortCtrl.abort(), 8000); // beri waktu respons normal tiba dulu
+        }
       } catch {
         // server sibuk — biarkan, coba lagi di tick berikutnya
       }
-    }, 1000);
+    }, 2000);
     try {
       const formData = new FormData();
       formData.set("file", file);
@@ -163,6 +198,7 @@ export default function ImportPage() {
       const res = await fetch(endpointMap[importType], {
         method: "POST",
         body: formData,
+        signal: abortCtrl.signal,
       });
       const data = await res.json();
 
@@ -202,7 +238,6 @@ export default function ImportPage() {
     } finally {
       clearInterval(pollTimer);
       setImporting(false);
-      setProgress(null);
     }
   };
 
@@ -374,16 +409,22 @@ export default function ImportPage() {
         {preview && (
           <button
             onClick={handleImport}
-            disabled={importing || !selectedAccountId}
+            disabled={importing || !selectedAccountId || !!progress}
             className="px-6 py-2.5 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {importing ? "Mengimpor..." : "Import ke Database"}
           </button>
         )}
 
-        {/* Progress */}
-        {importing && progress && (
+        {/* Progress — tampil untuk impor aktif apa pun di server, termasuk yang
+            dimulai dari tab/komputer lain atau sebelum halaman ini di-refresh */}
+        {progress && (
           <div className="bg-white rounded-lg border p-4 space-y-2">
+            <p className="text-xs text-muted-foreground">
+              {typeLabels[progress.type as ImportType] ?? progress.type} ·{" "}
+              {progress.fileName}
+              {!importing && " — impor berjalan dari sesi lain, dipantau di sini"}
+            </p>
             <div className="flex justify-between text-sm">
               <span>
                 {progress.phase === "parsing"
