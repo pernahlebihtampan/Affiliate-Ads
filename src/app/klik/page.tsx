@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { KlikChart, KlikBucket } from "@/components/klik-chart";
-import { formatCurrency, formatNumber } from "@/lib/utils";
+import { defaultDateRange, formatCurrency, formatNumber } from "@/lib/utils";
 
 interface Metrics {
   klik: number;
@@ -49,11 +49,11 @@ export default function KlikPage() {
   const [byNegara, setByNegara] = useState<NegaraRow[]>([]);
   const [coverage, setCoverage] = useState<{ from: string; to: string } | null>(null);
   const [loading, setLoading] = useState(true);
-  // Rentang awal dikosongkan, API men-default ke cakupan data klik (CSV klik
-  // Shopee hanya beberapa hari) dan input diisi dari respons pertama, supaya
-  // CR/EPC tidak dihitung dari rentang tanpa data klik.
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  // Default: 30 hari sebelum kemarin s/d kemarin — seragam dengan Dashboard &
+  // Performa Wilayah. Catatan cakupan data klik tetap ditampilkan: hari di
+  // dalam rentang tapi di luar cakupan membuat CR/EPC lebih rendah dari nyata.
+  const [fromDate, setFromDate] = useState(() => defaultDateRange().from);
+  const [toDate, setToDate] = useState(() => defaultDateRange().to);
   const [shopeeAccountFilter, setShopeeAccountFilter] = useState("");
   const [shopeeAccounts, setShopeeAccounts] = useState<AccountOption[]>([]);
   const [tagFilter, setTagFilter] = useState("");
@@ -84,9 +84,6 @@ export default function KlikPage() {
       // saat salah satu filter aktif
       setTagOptions(data.tagOptions || []);
       setPerujukOptions(data.perujukOptions || []);
-      // Isi input tanggal dengan rentang efektif dari API (sekali, saat kosong)
-      if (data.range?.from) setFromDate((v) => v || data.range.from);
-      if (data.range?.to) setToDate((v) => v || data.range.to);
     } catch (err) {
       console.error(err);
     } finally {
@@ -206,9 +203,9 @@ export default function KlikPage() {
               <b>
                 {coverage.from} s/d {coverage.to}
               </b>{" "}
-              (CSV klik Shopee terbatas), rentang default mengikuti cakupan
-              ini. Memilih rentang di luar itu membuat CR/EPC menyesatkan
-              (pesanan ada, kliknya tidak tercatat).
+              (CSV klik Shopee terbatas). Hari di luar cakupan itu membuat
+              CR/EPC menyesatkan (pesanan ada, kliknya tidak tercatat)
+              persempit rentang ke cakupan ini untuk angka yang akurat.
             </span>
           )}
         </div>

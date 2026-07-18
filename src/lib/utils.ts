@@ -19,6 +19,25 @@ export function formatNumber(value: number): string {
 }
 
 /**
+ * Rentang tanggal default untuk halaman analisis: 30 hari sebelum kemarin
+ * s/d kemarin. Hari berjalan sengaja dikecualikan — datanya belum lengkap
+ * sebelum CSV berikutnya diimpor, sehingga angka hari ini selalu tampak anjlok.
+ * Tanggal dihitung dari jam lokal browser (bukan toISOString/UTC yang bisa
+ * mundur sehari saat pagi WIB).
+ */
+export function defaultDateRange(): { from: string; to: string } {
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate()
+    ).padStart(2, "0")}`;
+  const from = new Date();
+  from.setDate(from.getDate() - 31); // 30 hari sebelum kemarin
+  const to = new Date();
+  to.setDate(to.getDate() - 1); // kemarin
+  return { from: fmt(from), to: fmt(to) };
+}
+
+/**
  * Parse waktu Shopee/Meta (WIB, UTC+7) menjadi Date yang instannya = digit apa adanya.
  *
  * Dibangun via Date.UTC(...) sehingga `.toISOString()` mengembalikan digit yang sama

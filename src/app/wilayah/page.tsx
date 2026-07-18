@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { RegionProfitChart } from "@/components/region-profit-chart";
-import { formatCurrency, formatNumber } from "@/lib/utils";
+import { defaultDateRange, formatCurrency, formatNumber } from "@/lib/utils";
 
 interface RegionRow {
   region: string;
@@ -59,12 +59,9 @@ export default function WilayahPage() {
   const [totals, setTotals] = useState<Totals | null>(null);
   const [komisiTanpaSpend, setKomisiTanpaSpend] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [fromDate, setFromDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d.toISOString().split("T")[0];
-  });
-  const [toDate, setToDate] = useState(() => new Date().toISOString().split("T")[0]);
+  // Default: 30 hari sebelum kemarin s/d kemarin (hari berjalan dikecualikan)
+  const [fromDate, setFromDate] = useState(() => defaultDateRange().from);
+  const [toDate, setToDate] = useState(() => defaultDateRange().to);
   const [metaAccountFilter, setMetaAccountFilter] = useState("");
   const [metaAccounts, setMetaAccounts] = useState<AccountOption[]>([]);
   const [campaignFilter, setCampaignFilter] = useState("");

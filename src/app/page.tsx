@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { DailyChart } from "@/components/daily-chart";
-import { formatCurrency, formatNumber } from "@/lib/utils";
+import { defaultDateRange, formatCurrency, formatNumber } from "@/lib/utils";
 
 interface DashboardRow {
   // null = kampanye Shopee bertag yang belum ditautkan di Campaign Hub
@@ -87,12 +87,9 @@ export default function DashboardPage() {
   const [organic, setOrganic] = useState<OrganicStats | null>(null);
   const [dailyData, setDailyData] = useState<DailyDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
-  const [fromDate, setFromDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d.toISOString().split("T")[0];
-  });
-  const [toDate, setToDate] = useState(() => new Date().toISOString().split("T")[0]);
+  // Default: 30 hari sebelum kemarin s/d kemarin (hari berjalan dikecualikan)
+  const [fromDate, setFromDate] = useState(() => defaultDateRange().from);
+  const [toDate, setToDate] = useState(() => defaultDateRange().to);
   // Filter opsional. campaignInput/tagInput = teks ketikan (hanya membuka
   // dropdown saran, TIDAK memicu fetch); *Filter di-set saat item dipilih
   // dari dropdown → baru reload data (exact match satu kampanye/tag).
