@@ -94,7 +94,7 @@ export default function ImportPage() {
       }
     };
     tick();
-    const timer = setInterval(tick, 1500);
+    const timer = setInterval(tick, 800);
     return () => {
       stopped = true;
       clearInterval(timer);
@@ -257,6 +257,15 @@ export default function ImportPage() {
   };
 
   const getPreviewColumns = () => typeColumns[importType];
+
+  // Server sudah masuk fase impor baris dan tahu total-nya → tampilkan persen nyata.
+  // Sebelum itu (upload/parsing, atau impor kecil yang belum sempat dipoll) → bar
+  // indeterminate yang muncul seketika tombol diklik, tidak menunggu poll server.
+  const serverImportingPhase =
+    progress?.phase === "importing" && progress.total > 0;
+  const serverPct = serverImportingPhase
+    ? Math.round((progress!.processed / progress!.total) * 100)
+    : 0;
 
   const getPreviewValue = (row: PreviewRow, col: string) => {
     switch (col) {
@@ -425,45 +434,40 @@ export default function ImportPage() {
           </button>
         )}
 
-        {/* Progress — tampil untuk impor aktif apa pun di server, termasuk yang
-            dimulai dari tab/komputer lain atau sebelum halaman ini di-refresh */}
-        {progress && (
+        {/* Progress — muncul SEKETIKA tombol diklik (bar indeterminate), tidak
+            menunggu poll server. Beralih ke persen nyata begitu server melapor.
+            Juga menangkap impor aktif dari tab/komputer lain. */}
+        {(importing || progress) && (
           <div className="bg-white rounded-lg border p-4 space-y-2">
             <p className="text-xs text-muted-foreground">
-              {typeLabels[progress.type as ImportType] ?? progress.type} ·{" "}
-              {progress.fileName}
-              {!importing && " — impor berjalan dari sesi lain, dipantau di sini"}
+              {typeLabels[(progress?.type as ImportType) ?? importType] ??
+                progress?.type}{" "}
+              · {progress?.fileName ?? file?.name}
+              {!importing && progress && " — impor berjalan dari sesi lain, dipantau di sini"}
             </p>
             <div className="flex justify-between text-sm">
               <span>
-                {progress.phase === "parsing"
-                  ? "Membaca & parsing file CSV..."
-                  : `Mengimpor ${formatNumber(progress.processed)} dari ${formatNumber(progress.total)} baris`}
+                {serverImportingPhase
+                  ? `Mengimpor ${formatNumber(progress!.processed)} dari ${formatNumber(progress!.total)} baris`
+                  : "Membaca & memproses file CSV..."}
               </span>
-              {progress.phase === "importing" && progress.total > 0 && (
-                <span className="font-medium">
-                  {Math.round((progress.processed / progress.total) * 100)}%
-                </span>
+              {serverImportingPhase && (
+                <span className="font-medium">{serverPct}%</span>
               )}
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
                 className={`h-full bg-primary transition-all duration-500 ${
-                  progress.phase === "parsing" ? "animate-pulse" : ""
+                  serverImportingPhase ? "" : "animate-pulse"
                 }`}
-                style={{
-                  width:
-                    progress.phase === "importing" && progress.total > 0
-                      ? `${Math.round((progress.processed / progress.total) * 100)}%`
-                      : "8%",
-                }}
+                style={{ width: serverImportingPhase ? `${serverPct}%` : "15%" }}
               />
             </div>
-            {progress.phase === "importing" && (
+            {serverImportingPhase && (
               <p className="text-xs text-muted-foreground">
-                {formatNumber(progress.inserted)} baru ·{" "}
-                {formatNumber(progress.updated)} update ·{" "}
-                {formatNumber(progress.skipped)} skip
+                {formatNumber(progress!.inserted)} baru ·{" "}
+                {formatNumber(progress!.updated)} update ·{" "}
+                {formatNumber(progress!.skipped)} skip
               </p>
             )}
           </div>
