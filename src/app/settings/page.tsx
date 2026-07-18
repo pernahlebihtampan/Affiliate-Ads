@@ -42,7 +42,7 @@ export default function SettingsPage() {
       return;
     }
     setBusy("restart");
-    setLog("Build ulang dari kode di komputer ini… (mohon tunggu, jangan tutup halaman)");
+    setLog("Build ulang dari kode di komputer server… (mohon tunggu, jangan tutup halaman)");
     try {
       const res = await fetch("/api/system", {
         method: "POST",
@@ -106,10 +106,14 @@ export default function SettingsPage() {
           <div>
             <h2 className="font-medium">Deploy &amp; Pembaruan</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              <b>Update</b> = tarik kode dari GitHub, build ulang, lalu restart otomatis
-              (jalankan setelah selesai coding &amp; push). <b>Restart</b> = build ulang
-              dari kode yang sudah ada di komputer ini lalu restart — dipakai setelah
-              kode diedit langsung di komputer ini, tanpa menarik dari GitHub.
+              <b>Update</b> = tarik kode terbaru dari GitHub, build ulang, lalu restart
+              otomatis dipakai bila kode diedit di komputer lain lalu di-push ke
+              GitHub. <b>Restart</b> = build ulang dari kode yang sudah ada di{" "}
+              <b>komputer server</b>{" "}
+              (tanpa menarik dari GitHub) lalu restart 
+              setelah kode diedit langsung di komputer server. Kedua tombol boleh
+              diklik dari perangkat mana pun (HP/laptop lain). Proses build &amp;
+              restart selalu berjalan di komputer server.
             </p>
           </div>
 
@@ -138,7 +142,7 @@ export default function SettingsPage() {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Kedua tombol mem-build di komputer ini (folder <code>.next</code> tidak
+          Kedua tombol mem-build di komputer server (folder <code>.next</code> tidak
           di-commit ke Git); bila build gagal, server tidak di-restart dan versi
           lama tetap jalan. Khusus <b>Update</b>: repo harus punya kredensial
           GitHub yang tersimpan agar <code>git pull</code> tidak minta password.

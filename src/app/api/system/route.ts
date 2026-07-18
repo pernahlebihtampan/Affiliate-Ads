@@ -5,8 +5,10 @@ import { promisify } from "node:util";
 // Kontrol proses untuk operator awam: Restart & Update via systemd (mirip
 // shopee-automation). Bedanya app ini jalan mode PRODUKSI, jadi keduanya harus
 // build ulang sebelum restart bermakna. "Update" menarik kode dari GitHub dulu;
-// "Restart" build dari kode yang sudah ada di komputer ini — dipakai selama
-// coding masih dilakukan langsung di komputer yang sama (belum lewat GitHub).
+// "Restart" build dari kode yang sudah ada di komputer server — dipakai selama
+// coding masih dilakukan langsung di mesin server (belum lewat GitHub). Kedua
+// aksi selalu dieksekusi di mesin server, dari perangkat mana pun tombolnya
+// diklik.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
