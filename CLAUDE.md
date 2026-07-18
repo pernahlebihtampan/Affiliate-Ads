@@ -47,7 +47,7 @@ Kunci penghubung: **`Tag_link1` Shopee ↔ nama kampanye Meta**, dipetakan manua
 - `src/app/*/page.tsx` — halaman client (`"use client"`), fetch ke `/api`. Semua dibungkus `<DashboardLayout>` (`src/components/dashboard-layout.tsx` → `Sidebar` + `ToastContainer`).
 
 ### Halaman (lihat `src/components/sidebar.tsx`)
-`/` Dashboard · `/import` Import CSV · `/campaign-hub` Campaign Hub · `/akun` Akun · `/riwayat-impor` Riwayat Impor · `/data` Data Browser · `/campaign/[id]` detail kampanye.
+`/` Dashboard · `/import` Import CSV · `/campaign-hub` Campaign Hub · `/wilayah` Performa Wilayah (rekomendasi wilayah via `/api/wilayah`: komisi diprorata porsi spend per wilayah per tanggal) · `/klik` Performa Klik (analisis ShopeeClick via `/api/klik`: per jam/hari/tag/perujuk/negara; `perujuk` klik = `platform` pesanan sehingga CR & EPC per perujuk terhitung) · `/akun` Akun · `/riwayat-impor` Riwayat Impor · `/data` Data Browser · `/campaign/[id]` detail kampanye.
 
 ## Model Data (Prisma)
 
