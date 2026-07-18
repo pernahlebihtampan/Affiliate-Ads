@@ -21,7 +21,7 @@ export interface KlikBucket {
 }
 
 const KLIK_COLOR = "#2563EB";
-const CR_COLOR = "#B45309";
+const CR_COLOR = "#0D9488";
 
 interface TooltipEntry {
   payload?: KlikBucket;
