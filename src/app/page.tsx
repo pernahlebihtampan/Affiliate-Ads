@@ -827,7 +827,7 @@ function SortableTh({
   return (
     <th
       onClick={() => onSort(sortKeyName)}
-      className={`p-3 font-medium cursor-pointer select-none hover:bg-gray-100 ${
+      className={`p-3 font-medium cursor-pointer select-none hover:bg-gray-100 whitespace-nowrap align-middle ${
         align === "right" ? "text-right" : "text-left"
       } ${active ? "text-primary" : ""}`}
       title={`Urutkan berdasarkan ${label}`}
