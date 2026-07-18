@@ -77,13 +77,20 @@ export default function ImportPage() {
   // di-refresh. State `progress` hanya terisi saat ada impor aktif.
   useEffect(() => {
     let stopped = false;
+    let inFlight = false; // jangan menumpuk request bila server lambat merespons
     const tick = async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
-        const res = await fetch("/api/import/progress");
+        const res = await fetch("/api/import/progress", {
+          signal: AbortSignal.timeout(5000),
+        });
         const p: ImportProgress | null = await res.json();
         if (!stopped) setProgress(p?.active ? p : null);
       } catch {
-        // server sibuk — coba lagi di tick berikutnya
+        // server sibuk / timeout — coba lagi di tick berikutnya
+      } finally {
+        inFlight = false;
       }
     };
     tick();
@@ -127,7 +134,9 @@ export default function ImportPage() {
   };
 
   const fetchProgress = async (): Promise<ImportProgress | null> => {
-    const res = await fetch("/api/import/progress");
+    const res = await fetch("/api/import/progress", {
+      signal: AbortSignal.timeout(5000),
+    });
     return res.json();
   };
 

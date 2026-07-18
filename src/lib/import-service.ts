@@ -5,6 +5,16 @@ import type { MetaAdRow, ShopeeClickRow, ShopeeCommissionRow } from "./csv-parse
 
 const BATCH_SIZE = 500;
 const PROGRESS_EVERY = 100;
+const YIELD_EVERY = 20;
+
+// Driver libsql file lokal bersifat sinkron — await-nya resolve seketika,
+// sehingga loop impor menjadi rantai microtask yang tak pernah kembali ke
+// poll phase event loop: SEMUA request lain (termasuk GET /api/import/progress)
+// menggantung sampai impor selesai. setImmediate melepas kendali ke poll phase
+// agar server tetap responsif selama impor berjalan.
+function yieldEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
 
 export interface ImportResult {
   inserted: number;
@@ -173,6 +183,9 @@ export async function importMetaAdCsv(
     }
 
     rows[i] = null as never; // lepaskan baris terproses agar bisa di-GC (file besar)
+    if ((i + 1) % YIELD_EVERY === 0) {
+      await yieldEventLoop();
+    }
     if ((i + 1) % PROGRESS_EVERY === 0) {
       updateImportProgress(i + 1, result);
     }
@@ -257,6 +270,9 @@ export async function importShopeeClickCsv(
     }
 
     rows[i] = null as never; // lepaskan baris terproses agar bisa di-GC (file besar)
+    if ((i + 1) % YIELD_EVERY === 0) {
+      await yieldEventLoop();
+    }
     if ((i + 1) % PROGRESS_EVERY === 0) {
       updateImportProgress(i + 1, result);
     }
@@ -379,6 +395,9 @@ export async function importShopeeCommissionCsv(
     }
 
     rows[i] = null as never; // lepaskan baris terproses agar bisa di-GC (file besar)
+    if ((i + 1) % YIELD_EVERY === 0) {
+      await yieldEventLoop();
+    }
     if ((i + 1) % PROGRESS_EVERY === 0) {
       updateImportProgress(i + 1, result);
     }
