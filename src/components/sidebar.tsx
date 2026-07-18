@@ -5,11 +5,11 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: "📊" },
+  { href: "/", label: "Dasbor", icon: "📊" },
   { href: "/wilayah", label: "Performa Wilayah", icon: "🗺️" },
   { href: "/klik", label: "Performa Klik", icon: "🖱️" },
   { href: "/import", label: "Import CSV", icon: "📥" },
-  { href: "/campaign-hub", label: "Campaign Hub", icon: "🔗" },
+  { href: "/campaign-hub", label: "Pusat Kampanye", icon: "🔗" },
   { href: "/akun", label: "Akun", icon: "👤" },
   { href: "/riwayat-impor", label: "Riwayat Impor", icon: "📋" },
   { href: "/data", label: "Data Browser", icon: "🔍" },

@@ -229,7 +229,7 @@ export default function DashboardPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Dashboard</h1>
+            <h1 className="text-2xl font-bold">Dasbor</h1>
             <p className="text-sm text-muted-foreground">
               Ringkasan performa kampanye ter-mapping
             </p>
@@ -395,7 +395,7 @@ export default function DashboardPage() {
           </select>
           <label
             className="flex items-center gap-1.5 px-3 py-1.5 border rounded-md text-sm bg-white cursor-pointer select-none"
-            title="Tampilkan/sembunyikan kampanye Shopee bertag yang belum ditautkan di Campaign Hub (baris amber, spend 0). Totals & grafik ikut menyesuaikan."
+            title="Tampilkan/sembunyikan kampanye Shopee bertag yang belum ditautkan di Pusat Kampanye (baris amber, spend 0). Totals & grafik ikut menyesuaikan."
           >
             <input
               type="checkbox"
@@ -489,7 +489,7 @@ export default function DashboardPage() {
             ℹ️ Ada <b>{formatCurrency(spendTanpaTautan.spend)}</b> spend dari{" "}
             {spendTanpaTautan.campaigns} kampanye Meta yang belum ditautkan di{" "}
             <a href="/campaign-hub" className="text-primary hover:underline">
-              Campaign Hub
+              Pusat Kampanye
             </a>{" "}
             tidak termasuk angka di atas. Keuntungan setelah dikurangi spend
             ini ≈{" "}
@@ -567,7 +567,7 @@ export default function DashboardPage() {
                 ) : rows.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="p-6 text-center text-muted-foreground">
-                      Belum ada data. Import CSV atau hubungkan kampanye di Campaign Hub.
+                      Belum ada data. Import CSV atau hubungkan kampanye di Pusat Kampanye.
                     </td>
                   </tr>
                 ) : (
@@ -589,7 +589,7 @@ export default function DashboardPage() {
                         {row.metaCampaignId === null ? (
                           <a
                             href="/campaign-hub"
-                            title="Kampanye Shopee ini belum ditautkan ke kampanye Meta, tautkan di Campaign Hub"
+                            title="Kampanye Shopee ini belum ditautkan ke kampanye Meta, tautkan di Pusat Kampanye"
                             className="text-muted-foreground italic hover:underline"
                           >
                             Belum tertaut

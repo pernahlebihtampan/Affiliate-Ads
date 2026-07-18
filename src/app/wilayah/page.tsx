@@ -334,7 +334,7 @@ export default function WilayahPage() {
           <span className="text-xs text-muted-foreground basis-full">
             ± Komisi Shopee tidak punya dimensi wilayah, komisi tiap kampanye
             di-<b>prorata</b> ke wilayah mengikuti porsi spend per tanggal klik
-            (estimasi). Hanya kampanye yang tertaut di Campaign Hub yang dihitung.
+            (estimasi). Hanya kampanye yang tertaut di Pusat Kampanye yang dihitung.
           </span>
           {(l1Filter || platformFilter) && (
             <span className="text-xs text-muted-foreground basis-full">
@@ -434,7 +434,7 @@ export default function WilayahPage() {
                   <tr>
                     <td colSpan={12} className="p-6 text-center text-muted-foreground">
                       Belum ada data wilayah. Import CSV Meta terbaru (dengan kolom
-                      Wilayah) dan tautkan kampanye di Campaign Hub.
+                      Wilayah) dan tautkan kampanye di Pusat Kampanye.
                     </td>
                   </tr>
                 ) : (
