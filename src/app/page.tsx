@@ -42,6 +42,7 @@ interface Totals {
   komisiTertunda: number;
   komisiSelesai: number;
   totalKomisi: number;
+  profit: number;
   roas: number;
 }
 
@@ -80,6 +81,9 @@ interface DailyDataPoint {
 export default function DashboardPage() {
   const [rows, setRows] = useState<DashboardRow[]>([]);
   const [totals, setTotals] = useState<Totals | null>(null);
+  // Spend kampanye Meta yang belum ditautkan di Campaign Hub (tidak masuk
+  // totals — hanya catatan di bawah summary cards)
+  const [spendTanpaTautan, setSpendTanpaTautan] = useState({ spend: 0, campaigns: 0 });
   const [organic, setOrganic] = useState<OrganicStats | null>(null);
   const [dailyData, setDailyData] = useState<DailyDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,6 +156,7 @@ export default function DashboardPage() {
       const data = await res.json();
       setRows(data.rows || []);
       setTotals(data.totals);
+      setSpendTanpaTautan(data.spendTanpaTautan || { spend: 0, campaigns: 0 });
       setOrganic(data.organicStats);
       setRegions(data.regions || []);
       setCampaignOptions(data.campaignOptions || []);
@@ -454,11 +459,16 @@ export default function DashboardPage() {
 
         {/* Summary Cards */}
         {totals && (
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4">
             <SummaryCard label="Total Spend" value={formatCurrency(totals.spend)} />
             <SummaryCard
               label={regionFilter ? "Total Komisi (estimasi)" : "Total Komisi"}
               value={(regionFilter ? "±" : "") + formatCurrency(totals.totalKomisi)}
+            />
+            <SummaryCard
+              label={regionFilter ? "Keuntungan (estimasi)" : "Keuntungan"}
+              value={(regionFilter ? "±" : "") + formatCurrency(totals.profit)}
+              colorClass={totals.profit < 0 ? "text-red-600" : "text-green-600"}
             />
             <SummaryCard
               label="ROAS"
@@ -469,6 +479,24 @@ export default function DashboardPage() {
             <SummaryCard label="Klik Meta" value={formatNumber(totals.metaClicks)} />
             <SummaryCard label="Klik Shopee" value={formatNumber(totals.shopeeClicks)} />
           </div>
+        )}
+
+        {/* Catatan spend Meta belum tertaut — tidak masuk totals di atas */}
+        {totals && spendTanpaTautan.spend > 0 && (
+          <p className="text-xs text-muted-foreground -mt-3">
+            ℹ️ Ada <b>{formatCurrency(spendTanpaTautan.spend)}</b> spend dari{" "}
+            {spendTanpaTautan.campaigns} kampanye Meta yang belum ditautkan di{" "}
+            <a href="/campaign-hub" className="text-primary hover:underline">
+              Campaign Hub
+            </a>{" "}
+            — tidak termasuk angka di atas. Keuntungan setelah dikurangi spend
+            ini ≈{" "}
+            <b>
+              {(regionFilter ? "±" : "") +
+                formatCurrency(totals.profit - spendTanpaTautan.spend)}
+            </b>
+            .
+          </p>
         )}
 
         {/* Daily Chart */}

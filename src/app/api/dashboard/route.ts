@@ -323,9 +323,45 @@ export async function GET(request: NextRequest) {
     komisiTertunda: allRows.reduce((s, r) => s + r.komisiTertunda, 0),
     komisiSelesai: allRows.reduce((s, r) => s + r.komisiSelesai, 0),
     totalKomisi: allRows.reduce((s, r) => s + r.totalKomisi, 0),
+    profit: 0,
     roas: 0,
   };
+  // Keuntungan = komisi − spend pada cakupan tabel (hub tertaut + baris
+  // belum-tertaut). Komisi organik TIDAK termasuk (panel terpisah), dan spend
+  // kampanye Meta yang belum tertaut di Hub juga tidak — sama seperti ROAS.
+  totals.profit = totals.totalKomisi - totals.spend;
   totals.roas = totals.spend > 0 ? totals.totalKomisi / totals.spend : 0;
+
+  // Spend kampanye Meta yang BELUM ditautkan di Campaign Hub — tidak punya
+  // sisi Shopee sehingga tidak tampil sebagai baris, tapi jumlahnya dilaporkan
+  // sebagai catatan supaya user tahu keuntungan riil lebih rendah dari card.
+  // Disembunyikan saat filter sisi-Shopee (akun Shopee / tag) atau filter
+  // kampanye aktif — cakupannya tidak relevan dengan spend di luar pilihan itu.
+  const spendTanpaTautan = { spend: 0, campaigns: 0 };
+  if (!campaignQuery && !tagQuery && !shopeeAccountId) {
+    const unlinkedMeta = await prisma.metaCampaign.findMany({
+      where: {
+        hub: null,
+        ...(metaAdAccountId ? { metaAdAccountId } : {}),
+        ...(deliveryFilter ? { status: deliveryFilter } : {}),
+      },
+      include: {
+        dailyStats: {
+          where: {
+            ...(dateFilter ? { date: dateFilter } : {}),
+            ...(region ? { region } : {}),
+          },
+        },
+      },
+    });
+    for (const c of unlinkedMeta) {
+      const s = c.dailyStats.reduce((sum, d) => sum + d.spendIDR, 0);
+      if (s > 0) {
+        spendTanpaTautan.spend += s;
+        spendTanpaTautan.campaigns++;
+      }
+    }
+  }
 
   // Get unmapped (organic) data — filter level-item ikut diterapkan;
   // filter campaign/tag tidak (organik = tanpa kampanye)
@@ -382,7 +418,7 @@ export async function GET(request: NextRequest) {
 
   // estimated: metrik Shopee (komisi/pesanan/klik) adalah hasil prorata wilayah
   return NextResponse.json({
-    rows: allRows, totals, organicStats, regions, campaignOptions,
+    rows: allRows, totals, spendTanpaTautan, organicStats, regions, campaignOptions,
     tagOptions: allTagOptions,
     statuses: statusRows.map((r) => r.statusPesanan),
     l1Categories: l1Rows.map((r) => r.l1Kategori),
