@@ -7,6 +7,15 @@ const BATCH_SIZE = 500;
 const PROGRESS_EVERY = 100;
 const YIELD_EVERY = 20;
 
+// Platform/perujuk yang dikecualikan saat impor Shopee (klik & komisi) — trafik
+// dari dalam Shopee sendiri (video/live), bukan hasil iklan Meta. Dicocokkan
+// case-insensitive. Baris ini dilewati (dihitung skipped), tidak masuk DB.
+const EXCLUDED_SHOPEE_PLATFORMS = new Set(["shopeevideo-shopee", "shopeelive-shopee"]);
+
+function isExcludedShopeePlatform(value: string): boolean {
+  return EXCLUDED_SHOPEE_PLATFORMS.has(value.trim().toLowerCase());
+}
+
 // Driver libsql file lokal bersifat sinkron — await-nya resolve seketika,
 // sehingga loop impor menjadi rantai microtask yang tak pernah kembali ke
 // poll phase event loop: SEMUA request lain (termasuk GET /api/import/progress)
@@ -238,6 +247,15 @@ export async function importShopeeClickCsv(
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
+
+    // Kecualikan trafik internal Shopee (video/live) — lewati, jangan masuk DB.
+    if (isExcludedShopeePlatform(row.perujuk)) {
+      result.skipped++;
+      rows[i] = null as never;
+      if ((i + 1) % PROGRESS_EVERY === 0) updateImportProgress(i + 1, result);
+      continue;
+    }
+
     const { tag1, tag2 } = parseTagRaw(row.tagRaw);
     const clickTime = parseDateWib(row.waktuKlik);
 
@@ -325,6 +343,14 @@ export async function importShopeeCommissionCsv(
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
+
+    // Kecualikan trafik internal Shopee (video/live) — lewati, jangan masuk DB.
+    if (isExcludedShopeePlatform(row.platform)) {
+      result.skipped++;
+      rows[i] = null as never;
+      if ((i + 1) % PROGRESS_EVERY === 0) updateImportProgress(i + 1, result);
+      continue;
+    }
 
     let campaignId: number | null = null;
     if (row.tag1) {
