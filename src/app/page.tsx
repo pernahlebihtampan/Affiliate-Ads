@@ -5,6 +5,7 @@ import { DashboardLayout } from "@/components/dashboard-layout";
 import { ReportTable } from "@/components/report-table";
 import { FileDropCard, type ImportedInfo } from "@/components/file-drop-card";
 import { showToast } from "@/components/toast-container";
+import { DateInput } from "@/components/ui/date-input";
 import { defaultDateRange } from "@/lib/utils";
 import type { ReportRow, ReportTotals } from "@/lib/daily-snapshot";
 
@@ -198,10 +199,9 @@ export default function DailyDashboardPage() {
           </div>
           <label className="flex items-center gap-2 text-sm">
             <span className="text-muted-foreground">Tanggal laporan</span>
-            <input
-              type="date"
+            <DateInput
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={setDate}
               className="px-3 py-1.5 border rounded-md text-sm"
             />
           </label>
@@ -238,36 +238,34 @@ export default function DailyDashboardPage() {
                 dateConfirmed ? "bg-green-50 border-green-300" : "bg-amber-50 border-amber-300"
               }`}
             >
+              <p className="text-xs text-muted-foreground mb-2">Tanggal laporan impor</p>
               <div className="flex items-center gap-4 flex-wrap">
                 <span className="text-3xl" aria-hidden>📅</span>
-                <div>
-                  <p className="text-xs text-muted-foreground">Tanggal laporan impor</p>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="mt-1 px-3 py-1.5 border rounded-md text-base font-semibold bg-white"
-                  />
-                </div>
+                <DateInput
+                  value={date}
+                  onChange={setDate}
+                  className="px-3 py-1.5 border rounded-md text-base font-semibold bg-white"
+                />
                 <p className="text-lg font-bold flex-1 min-w-40">{formatTanggal(date)}</p>
-                {dateConfirmed ? (
+                {dateConfirmed && (
                   <span className="inline-flex items-center gap-1.5 text-green-700 font-semibold text-sm">
                     ✓ Terkonfirmasi — siap impor
                   </span>
-                ) : (
-                  <button
-                    onClick={() => setConfirmedDate(date)}
-                    className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-semibold shrink-0"
-                  >
-                    Konfirmasi tanggal ini
-                  </button>
                 )}
               </div>
               {!dateConfirmed && (
-                <p className="text-xs text-amber-700 mt-3">
-                  ⚠ Kartu impor terkunci. Pastikan tanggal di atas benar lalu klik Konfirmasi —
-                  file distempel tanggal ini &amp; snapshot dibekukan; salah tanggal impor sulit dibatalkan.
-                </p>
+                <>
+                  <p className="text-xs text-amber-700 mt-3">
+                    ⚠ Kartu impor terkunci. Pastikan tanggal di atas benar lalu klik Konfirmasi
+                    sehingga file distempel tanggal ini &amp; snapshot dibekukan. Salah tanggal impor sulit dibatalkan.
+                  </p>
+                  <button
+                    onClick={() => setConfirmedDate(date)}
+                    className="mt-3 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-semibold"
+                  >
+                    Konfirmasi tanggal ini
+                  </button>
+                </>
               )}
             </div>
             {totalCards === 0 ? (
@@ -410,19 +408,17 @@ export default function DailyDashboardPage() {
             <div className="flex items-end gap-3 flex-wrap">
               <label className="text-sm">
                 <span className="block text-muted-foreground mb-1">Dari</span>
-                <input
-                  type="date"
+                <DateInput
                   value={rangeFrom}
-                  onChange={(e) => setRangeFrom(e.target.value)}
+                  onChange={setRangeFrom}
                   className="px-3 py-1.5 border rounded-md text-sm"
                 />
               </label>
               <label className="text-sm">
                 <span className="block text-muted-foreground mb-1">Sampai</span>
-                <input
-                  type="date"
+                <DateInput
                   value={rangeTo}
-                  onChange={(e) => setRangeTo(e.target.value)}
+                  onChange={setRangeTo}
                   className="px-3 py-1.5 border rounded-md text-sm"
                 />
               </label>

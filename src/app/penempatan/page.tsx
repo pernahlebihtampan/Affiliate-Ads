@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { PenempatanChart } from "@/components/penempatan-chart";
+import { DateInput } from "@/components/ui/date-input";
 import { defaultDateRange, formatCurrency, formatNumber } from "@/lib/utils";
 
 interface PlacementRow {
@@ -148,17 +149,15 @@ export default function PenempatanPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <input
-              type="date"
+            <DateInput
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
+              onChange={setFromDate}
               className="px-3 py-1.5 border rounded-md text-sm"
             />
             <span className="text-sm text-muted-foreground">s/d</span>
-            <input
-              type="date"
+            <DateInput
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
+              onChange={setToDate}
               className="px-3 py-1.5 border rounded-md text-sm"
             />
             <button
