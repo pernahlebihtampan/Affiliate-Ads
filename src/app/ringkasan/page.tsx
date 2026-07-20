@@ -3,6 +3,7 @@
 import { Fragment, useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { DailyChart } from "@/components/daily-chart";
+import { DailyClicksChart } from "@/components/daily-clicks-chart";
 import { DateInput } from "@/components/ui/date-input";
 import { SearchSelect } from "@/components/ui/search-select";
 import { defaultDateRange, formatCurrency, formatNumber } from "@/lib/utils";
@@ -96,6 +97,8 @@ interface DailyDataPoint {
   profit: number;
   profitSelesai: number;
   komisiDibatalkan: number;
+  klik: number;
+  pesanan: number;
 }
 
 export default function DashboardPage() {
@@ -502,6 +505,9 @@ export default function DashboardPage() {
 
         {/* Daily Chart */}
         {!loading && <DailyChart data={dailyData} />}
+
+        {/* Daily Clicks & Orders Chart */}
+        {!loading && <DailyClicksChart data={dailyData} />}
 
         {/* Organic Summary */}
         {organic && organic.totalKomisi > 0 && (

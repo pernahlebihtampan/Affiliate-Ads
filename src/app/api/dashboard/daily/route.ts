@@ -87,6 +87,11 @@ export async function GET(request: NextRequest) {
           orderItems: {
             where: itemWhere,
           },
+          clicks: {
+            where: {
+              ...(clickFilter ? { clickTimeUTC: clickFilter } : {}),
+            },
+          },
         },
       },
     },
@@ -162,6 +167,11 @@ export async function GET(request: NextRequest) {
           },
           include: {
             orderItems: { where: itemWhere },
+            clicks: {
+              where: {
+                ...(clickFilter ? { clickTimeUTC: clickFilter } : {}),
+              },
+            },
           },
         })
       ).filter((c) => !tagQuery || c.name.toLowerCase() === tagQuery)
@@ -174,21 +184,56 @@ export async function GET(request: NextRequest) {
   const komisiMap = new Map<string, number>();
   const komisiSelesaiMap = new Map<string, number>();
   const komisiBatalMap = new Map<string, number>();
-  // (items, ratios?, periodRatio) per sumber: hub pakai prorata wilayah;
+  // Klik & pesanan per tanggal (prorata wilayah sama seperti komisi). Pesanan
+  // = jumlah pesanan UNIK per tanggal klik (dedup idPemesanan, bobot = ratio
+  // tanggal klik item pertamanya), mengikuti cara /api/dashboard menghitung
+  // totalOrders. Klik dari ShopeeClick per clickTimeUTC.
+  const klikMap = new Map<string, number>();
+  const pesananMap = new Map<string, number>();
+  // (items, clicks, ratios?, periodRatio) per sumber: hub pakai prorata wilayah;
   // belum-tertaut selalu rasio 1 (region aktif → sudah di-skip di atas).
   const itemSources = [
     ...hubs.map((hub) => ({
       items: hub.shopeeCampaign.orderItems,
+      clicks: hub.shopeeCampaign.clicks,
       ratios: ratioByHubDate?.get(hub.metaCampaignId),
       periodRatio: periodRatioByHub.get(hub.metaCampaignId) ?? 0,
     })),
     ...unlinkedCampaigns.map((c) => ({
       items: c.orderItems,
+      clicks: c.clicks,
       ratios: undefined,
       periodRatio: 1,
     })),
   ];
-  for (const { items, ratios, periodRatio } of itemSources) {
+  const ratioForDate = (
+    ratios: Map<string, number> | undefined,
+    periodRatio: number,
+    dateKey: string
+  ): number => (ratioByHubDate ? ratios?.get(dateKey) ?? periodRatio : 1);
+  for (const { items, clicks, ratios, periodRatio } of itemSources) {
+    // Klik per tanggal
+    for (const click of clicks) {
+      if (!click.clickTimeUTC) continue;
+      const dateKey = click.clickTimeUTC.toISOString().split("T")[0];
+      const ratio = ratioForDate(ratios, periodRatio, dateKey);
+      if (ratio === 0) continue;
+      klikMap.set(dateKey, (klikMap.get(dateKey) || 0) + ratio);
+    }
+    // Pesanan unik per tanggal (dedup idPemesanan; pakai clickTimeUTC item
+    // pertama pesanan itu). Semua status dihitung (Dibatalkan tetap pesanan).
+    const seenOrders = new Map<string, Date | null>();
+    for (const item of items) {
+      if (!seenOrders.has(item.idPemesanan))
+        seenOrders.set(item.idPemesanan, item.clickTimeUTC);
+    }
+    for (const clickTime of seenOrders.values()) {
+      if (!clickTime) continue;
+      const dateKey = clickTime.toISOString().split("T")[0];
+      const ratio = ratioForDate(ratios, periodRatio, dateKey);
+      if (ratio === 0) continue;
+      pesananMap.set(dateKey, (pesananMap.get(dateKey) || 0) + ratio);
+    }
     for (const item of items) {
       if (!item.clickTimeUTC) continue;
       const dateKey = item.clickTimeUTC.toISOString().split("T")[0];
@@ -240,6 +285,8 @@ export async function GET(request: NextRequest) {
     profit: number;
     profitSelesai: number;
     komisiDibatalkan: number;
+    klik: number;
+    pesanan: number;
   }[] = [];
   const current = new Date(startDate);
   while (current <= endDate) {
@@ -255,6 +302,8 @@ export async function GET(request: NextRequest) {
       profit: komisi - spend,
       profitSelesai: komisiSelesai - spend,
       komisiDibatalkan: komisiBatalMap.get(dateKey) || 0,
+      klik: Math.round(klikMap.get(dateKey) || 0),
+      pesanan: Math.round(pesananMap.get(dateKey) || 0),
     });
     current.setUTCDate(current.getUTCDate() + 1);
   }
