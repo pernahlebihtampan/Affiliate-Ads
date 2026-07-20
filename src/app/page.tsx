@@ -77,6 +77,11 @@ export default function DailyDashboardPage() {
   >([]);
   const [linkPick, setLinkPick] = useState<Record<number, number>>({}); // shopeeId → metaId
 
+  // Lazy-refresh: Laporan & Rentang ditandai "perlu muat ulang" saat sumbernya
+  // berubah (impor/tautan), lalu di-refetch saat tab-nya dibuka. Hubungkan
+  // tetap eager (badge jumlah tag harus akurat), jadi tak butuh flag.
+  const [dirty, setDirty] = useState({ laporan: false, rentang: false });
+
   // Rentang (tab Rentang)
   const [rangeFrom, setRangeFrom] = useState(() => defaultDateRange().from);
   const [rangeTo, setRangeTo] = useState(() => defaultDateRange().to);
@@ -113,6 +118,24 @@ export default function DailyDashboardPage() {
     );
   }, []);
 
+  // Rentang = query manual (tombol "Tampilkan"). Segarkan hanya bila sudah
+  // dimuat, agar tabel yang sedang tampil tak jadi basi setelah impor/tautan —
+  // tanpa menembak query untuk rentang yang belum pernah diminta.
+  const refreshRangeIfLoaded = useCallback(async () => {
+    if (rangeTables.length === 0) return;
+    const res = await fetch(`/api/daily/range?from=${rangeFrom}&to=${rangeTo}`);
+    const data = await res.json();
+    setRangeTables(data.tables ?? []);
+  }, [rangeTables.length, rangeFrom, rangeTo]);
+
+  // Impor membuat dimensi ShopeeCampaign/MetaCampaign baru (get-or-create), jadi
+  // tab Hubungkan ikut disegarkan (badge live). `fetchDaily` wajib — status kartu
+  // di tab Impor & sumber tab Laporan ikut ter-refresh. Rentang ditunda ke buka-tab.
+  const onImportDone = useCallback(async () => {
+    await Promise.all([fetchDaily(), fetchHub()]);
+    setDirty((d) => ({ ...d, rentang: true }));
+  }, [fetchDaily, fetchHub]);
+
   useEffect(() => { fetchAccounts(); fetchHub(); }, [fetchAccounts, fetchHub]);
   useEffect(() => { fetchDaily(); }, [fetchDaily]);
 
@@ -130,20 +153,29 @@ export default function DailyDashboardPage() {
   const importedCards = importedMap.size;
   const pendingCards = Math.max(0, totalCards - importedCards);
 
+  // POST recompute snapshot tanggal aktif (server, wajib demi kebenaran) tanpa
+  // menarik hasil ke klien — dipakai `linkTag` yang menunda muat-ulang Laporan.
+  async function recomputeServer(): Promise<boolean> {
+    const res = await fetch("/api/daily/recompute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date }),
+    });
+    if (!res.ok) {
+      const d = await res.json();
+      showToast("Gagal hitung ulang", d.error || `HTTP ${res.status}`, "destructive");
+      return false;
+    }
+    return true;
+  }
+
+  // Tombol "↻ Hitung ulang" di tab Laporan (sedang terbuka) → refetch langsung.
   async function recompute() {
     setRecomputing(true);
     try {
-      const res = await fetch("/api/daily/recompute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date }),
-      });
-      if (res.ok) {
+      if (await recomputeServer()) {
         await fetchDaily();
         showToast("Snapshot diperbarui", `Laporan ${date} dihitung ulang.`, "success");
-      } else {
-        const d = await res.json();
-        showToast("Gagal hitung ulang", d.error || `HTTP ${res.status}`, "destructive");
       }
     } finally {
       setRecomputing(false);
@@ -160,12 +192,27 @@ export default function DailyDashboardPage() {
     });
     if (res.ok) {
       showToast("Tersambung", "Tag Shopee ditautkan ke kampanye Meta.", "success");
-      await fetchHub();
-      // Recompute snapshot tanggal aktif agar tabel mencerminkan tautan baru
-      await recompute();
+      await fetchHub(); // tag tertaut hilang seketika (tab Hubungkan sedang terbuka)
+      // Recompute snapshot server (wajib), tapi tunda muat-ulang Laporan & Rentang
+      // ke saat tab-nya dibuka.
+      const ok = await recomputeServer();
+      if (ok) setDirty({ laporan: true, rentang: true });
     } else {
       const d = await res.json();
       showToast("Gagal menautkan", d.error || `HTTP ${res.status}`, "destructive");
+    }
+  }
+
+  // Buka tab; bila sumbernya berubah sejak terakhir dilihat (dirty), muat ulang
+  // datanya sekarang lalu bersihkan flag. Hubungkan selalu eager → tak dicek.
+  async function selectTab(id: TabId) {
+    setTab(id);
+    if (id === "laporan" && dirty.laporan) {
+      setDirty((d) => ({ ...d, laporan: false }));
+      await fetchDaily();
+    } else if (id === "rentang" && dirty.rentang) {
+      setDirty((d) => ({ ...d, rentang: false }));
+      await refreshRangeIfLoaded();
     }
   }
 
@@ -213,7 +260,7 @@ export default function DailyDashboardPage() {
           {tabs.map((t) => (
             <button
               key={t.id}
-              onClick={() => setTab(t.id)}
+              onClick={() => selectTab(t.id)}
               className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-2 ${
                 tab === t.id
                   ? "border-primary text-primary"
@@ -292,7 +339,7 @@ export default function DailyDashboardPage() {
                           imported={importedMap.get(`${rt.type}:${acc.id}`)}
                           disabled={busy || !dateConfirmed}
                           onBusyChange={setBusy}
-                          onDone={fetchDaily}
+                          onDone={onImportDone}
                         />
                       ))}
                     </div>
@@ -315,7 +362,7 @@ export default function DailyDashboardPage() {
                           imported={importedMap.get(`${rt.type}:${acc.id}`)}
                           disabled={busy || !dateConfirmed}
                           onBusyChange={setBusy}
-                          onDone={fetchDaily}
+                          onDone={onImportDone}
                         />
                       ))}
                     </div>
