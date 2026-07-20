@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { KlikChart, KlikBucket } from "@/components/klik-chart";
 import { DateInput } from "@/components/ui/date-input";
+import { SearchSelect } from "@/components/ui/search-select";
 import { defaultDateRange, formatCurrency, formatNumber } from "@/lib/utils";
 
 interface Metrics {
@@ -170,19 +171,16 @@ export default function KlikPage() {
               </option>
             ))}
           </select>
-          <select
-            value={tagFilter}
-            onChange={(e) => setTagFilter(e.target.value)}
-            className="px-3 py-1.5 border rounded-md text-sm bg-white max-w-64"
+          <SearchSelect
+            items={tagOptions}
+            value={tagFilter || null}
+            onChange={(v) => setTagFilter((v as string) ?? "")}
+            getKey={(t) => t}
+            displayFn={(t) => t}
+            allLabel="Semua tag"
+            className="w-64"
             title="Saring berdasarkan Tag Shopee (Tag_link1) yang tercatat di data klik"
-          >
-            <option value="">Semua tag</option>
-            {tagOptions.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          />
           <select
             value={perujukFilter}
             onChange={(e) => setPerujukFilter(e.target.value)}

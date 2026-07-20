@@ -6,6 +6,7 @@ import { ReportTable } from "@/components/report-table";
 import { FileDropCard, type ImportedInfo } from "@/components/file-drop-card";
 import { showToast } from "@/components/toast-container";
 import { DateInput } from "@/components/ui/date-input";
+import { SearchSelect } from "@/components/ui/search-select";
 import { defaultDateRange } from "@/lib/utils";
 import type { ReportRow, ReportTotals } from "@/lib/daily-snapshot";
 
@@ -349,18 +350,17 @@ export default function DailyDashboardPage() {
                       <p className="text-sm font-medium truncate">{tag.name}</p>
                       <p className="text-xs text-muted-foreground truncate">{tag.accountName}</p>
                     </div>
-                    <select
-                      value={linkPick[tag.id] ?? ""}
-                      onChange={(e) =>
-                        setLinkPick((p) => ({ ...p, [tag.id]: Number(e.target.value) }))
+                    <SearchSelect
+                      items={metaCampaigns}
+                      value={linkPick[tag.id] ?? null}
+                      onChange={(id) =>
+                        setLinkPick((p) => ({ ...p, [tag.id]: id as number }))
                       }
-                      className="px-2 py-1.5 border rounded-md text-sm max-w-xs"
-                    >
-                      <option value="">Pilih kampanye Meta…</option>
-                      {metaCampaigns.map((m) => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                    </select>
+                      getKey={(m) => m.id}
+                      displayFn={(m) => m.name}
+                      placeholder="Pilih kampanye Meta…"
+                      className="w-72"
+                    />
                     <button
                       onClick={() => linkTag(tag.id)}
                       disabled={!linkPick[tag.id]}

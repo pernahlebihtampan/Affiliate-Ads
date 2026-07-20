@@ -5,14 +5,14 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/", label: "Dasbor", icon: "📊" },
-  { href: "/ringkasan", label: "Ringkasan", icon: "📈" },
+  { href: "/", label: "Dasbor", icon: "📈" },
+  { href: "/ringkasan", label: "Ringkasan", icon: "📊" },
   { href: "/klik", label: "Performa Klik", icon: "🖱️" },
   { href: "/wilayah", label: "Performa Wilayah", icon: "🗺️" },
   { href: "/penempatan", label: "Performa Penempatan", icon: "🎯" },
+  { href: "/akun", label: "Akun", icon: "👤" },
   { href: "/import", label: "Import CSV", icon: "📥" },
   { href: "/campaign-hub", label: "Pusat Kampanye", icon: "🔗" },
-  { href: "/akun", label: "Akun", icon: "👤" },
   { href: "/riwayat-impor", label: "Riwayat Impor", icon: "📋" },
   { href: "/data", label: "Data Browser", icon: "🔍" },
   { href: "/settings", label: "Pengaturan", icon: "⚙️" },

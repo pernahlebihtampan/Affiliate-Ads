@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { showToast } from "@/components/toast-container";
+import { SearchSelect } from "@/components/ui/search-select";
 
 interface MetaCampaign {
   id: number;
@@ -28,107 +29,6 @@ interface Suggestion {
   score: number;
   nameScore?: number;
   dataScore?: number | null; // null = data pesanan tidak cukup untuk dinilai
-}
-
-// ===== SEARCH SELECT COMPONENT =====
-function SearchSelect<T extends { id: number }>({
-  label,
-  items,
-  selectedId,
-  onSelect,
-  displayFn,
-  placeholder,
-  className,
-}: {
-  label: string;
-  items: T[];
-  selectedId: number | null;
-  onSelect: (id: number) => void;
-  displayFn: (item: T) => string;
-  placeholder?: string;
-  className?: string;
-}) {
-  const [search, setSearch] = useState("");
-  const [open, setOpen] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-
-  const filtered = search
-    ? items.filter((item) =>
-        displayFn(item).toLowerCase().includes(search.toLowerCase())
-      )
-    : items;
-
-  const selected = items.find((i) => i.id === selectedId);
-
-  // Close on click outside
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  return (
-    <div ref={wrapperRef} className="relative">
-      <label className="text-xs text-muted-foreground block mb-1">{label}</label>
-      <div
-        className={`px-3 py-2 border rounded-md text-sm cursor-pointer flex items-center justify-between bg-white ${className || ""}`}
-        onClick={() => setOpen(!open)}
-      >
-        <span className={selected ? "" : "text-gray-400"}>
-          {selected ? displayFn(selected) : placeholder || "-- Pilih --"}
-        </span>
-        <svg className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </div>
-      {open && (
-        <div className="absolute z-20 mt-1 w-full bg-white border rounded-md shadow-lg max-h-72 flex flex-col">
-          <div className="p-1 border-b">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Ketik untuk mencari..."
-              className="w-full px-2 py-1.5 border rounded text-sm outline-none focus:ring-1 focus:ring-blue-400"
-              autoFocus
-            />
-          </div>
-          <div className="overflow-y-auto flex-1">
-            {filtered.length === 0 ? (
-              <div className="p-3 text-sm text-gray-400 text-center">Tidak ditemukan</div>
-            ) : (
-              <div className="py-1">
-                {filtered.slice(0, 200).map((item) => (
-                  <div
-                    key={item.id}
-                    className={`px-3 py-1.5 text-sm cursor-pointer hover:bg-blue-50 truncate ${
-                      item.id === selectedId ? "bg-blue-100 font-medium" : ""
-                    }`}
-                    onClick={() => {
-                      onSelect(item.id);
-                      setOpen(false);
-                      setSearch("");
-                    }}
-                  >
-                    {displayFn(item)}
-                  </div>
-                ))}
-                {filtered.length > 200 && (
-                  <div className="px-3 py-1.5 text-xs text-gray-400 text-center">
-                    … dan {filtered.length - 200} lainnya
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 // ===== QUICK SHOPEE SEARCH (inline di kolom Aksi) =====
@@ -424,8 +324,9 @@ export default function CampaignHubPage() {
             <SearchSelect
               label="Kampanye Meta"
               items={metaCampaigns}
-              selectedId={selectedMetaId}
-              onSelect={(id) => setSelectedMetaId(id)}
+              value={selectedMetaId}
+              onChange={(id) => setSelectedMetaId(id as number | null)}
+              getKey={(m) => m.id}
               displayFn={(m) => `${m.name} (${m.metaAdAccount.name})`}
               placeholder="Cari kampanye Meta..."
               className="w-[32rem]"
@@ -433,8 +334,9 @@ export default function CampaignHubPage() {
             <SearchSelect
               label="Tag Shopee"
               items={unlinkedShopee}
-              selectedId={selectedShopeeId}
-              onSelect={(id) => setSelectedShopeeId(id)}
+              value={selectedShopeeId}
+              onChange={(id) => setSelectedShopeeId(id as number | null)}
+              getKey={(s) => s.id}
               displayFn={(s) => `${s.name} (${s.shopeeAccount.name})`}
               placeholder="Cari tag Shopee..."
               className="w-96"

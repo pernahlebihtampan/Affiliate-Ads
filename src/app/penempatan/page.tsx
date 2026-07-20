@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { PenempatanChart } from "@/components/penempatan-chart";
 import { DateInput } from "@/components/ui/date-input";
+import { SearchSelect } from "@/components/ui/search-select";
 import { defaultDateRange, formatCurrency, formatNumber } from "@/lib/utils";
 
 interface PlacementRow {
@@ -183,19 +184,16 @@ export default function PenempatanPage() {
               </option>
             ))}
           </select>
-          <select
-            value={campaignFilter}
-            onChange={(e) => setCampaignFilter(e.target.value)}
-            className="px-3 py-1.5 border rounded-md text-sm bg-white max-w-64"
+          <SearchSelect
+            items={campaignOptions}
+            value={campaignFilter || null}
+            onChange={(v) => setCampaignFilter((v as string) ?? "")}
+            getKey={(c) => c}
+            displayFn={(c) => c}
+            allLabel="Semua kampanye"
+            className="w-64"
             title="Lihat performa penempatan untuk satu kampanye saja"
-          >
-            <option value="">Semua kampanye</option>
-            {campaignOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+          />
           <select
             value={platformFilter}
             onChange={(e) => setPlatformFilter(e.target.value)}

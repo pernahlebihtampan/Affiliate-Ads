@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { RegionProfitChart } from "@/components/region-profit-chart";
 import { DateInput } from "@/components/ui/date-input";
+import { SearchSelect } from "@/components/ui/search-select";
 import { defaultDateRange, formatCurrency, formatNumber } from "@/lib/utils";
 
 interface RegionRow {
@@ -255,19 +256,16 @@ export default function WilayahPage() {
               </option>
             ))}
           </select>
-          <select
-            value={campaignFilter}
-            onChange={(e) => setCampaignFilter(e.target.value)}
-            className="px-3 py-1.5 border rounded-md text-sm bg-white max-w-64"
+          <SearchSelect
+            items={campaignOptions}
+            value={campaignFilter || null}
+            onChange={(v) => setCampaignFilter((v as string) ?? "")}
+            getKey={(c) => c}
+            displayFn={(c) => c}
+            allLabel="Semua kampanye tertaut"
+            className="w-64"
             title="Lihat performa wilayah untuk satu kampanye saja"
-          >
-            <option value="">Semua kampanye tertaut</option>
-            {campaignOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+          />
           <select
             value={deliveryFilter}
             onChange={(e) => setDeliveryFilter(e.target.value)}

@@ -4,6 +4,7 @@ import { Fragment, useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { DailyChart } from "@/components/daily-chart";
 import { DateInput } from "@/components/ui/date-input";
+import { SearchSelect } from "@/components/ui/search-select";
 import { defaultDateRange, formatCurrency, formatNumber } from "@/lib/utils";
 
 // Rincian sisi Shopee per tag (untuk baris expand di bawah baris kampanye
@@ -109,20 +110,16 @@ export default function DashboardPage() {
   // Default: 30 hari sebelum kemarin s/d kemarin (hari berjalan dikecualikan)
   const [fromDate, setFromDate] = useState(() => defaultDateRange().from);
   const [toDate, setToDate] = useState(() => defaultDateRange().to);
-  // Filter opsional. campaignInput/tagInput = teks ketikan (hanya membuka
-  // dropdown saran, TIDAK memicu fetch); *Filter di-set saat item dipilih
-  // dari dropdown → baru reload data (exact match satu kampanye/tag).
-  // campaignInput & tagInput saling eksklusif, mengisi satu menonaktifkan
-  // yang lain (dua sisi dari tautan hub yang sama).
+  // Filter opsional. campaignFilter/tagFilter di-set saat item dipilih dari
+  // combobox (exact match satu kampanye/tag) → reload data. Keduanya saling
+  // eksklusif, mengisi satu menonaktifkan yang lain (dua sisi tautan hub sama).
   // Filter akun (exact by id, dari master di /api/accounts, dimuat sekali)
   const [metaAccountFilter, setMetaAccountFilter] = useState("");
   const [shopeeAccountFilter, setShopeeAccountFilter] = useState("");
   const [metaAccounts, setMetaAccounts] = useState<AccountOption[]>([]);
   const [shopeeAccounts, setShopeeAccounts] = useState<AccountOption[]>([]);
-  const [campaignInput, setCampaignInput] = useState("");
   const [campaignFilter, setCampaignFilter] = useState("");
   const [campaignOptions, setCampaignOptions] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState("");
   const [tagFilter, setTagFilter] = useState("");
   const [tagOptions, setTagOptions] = useState<string[]>([]);
   const [regionFilter, setRegionFilter] = useState("");
@@ -133,8 +130,7 @@ export default function DashboardPage() {
   // Filter level-item Shopee
   const [statusFilter, setStatusFilter] = useState("");
   const [l1Filter, setL1Filter] = useState("");
-  // L3: input bebas + datalist (kategori di rentang tanggal), substring, di-debounce
-  const [l3Input, setL3Input] = useState("");
+  // L3: pilih satu kategori (di rentang tanggal) lewat combobox berpencarian
   const [l3Filter, setL3Filter] = useState("");
   const [platformFilter, setPlatformFilter] = useState("");
   // Toggle baris "Belum tertaut" (kampanye Shopee bertag tanpa hub). Bukan
@@ -218,12 +214,6 @@ export default function DashboardPage() {
       })
       .catch(console.error);
   }, []);
-
-  // Debounce input L3 kategori 400ms
-  useEffect(() => {
-    const t = setTimeout(() => setL3Filter(l3Input), 400);
-    return () => clearTimeout(t);
-  }, [l3Input]);
 
   const handleSort = (key: keyof DashboardRow) => {
     if (sortKey === key) {
@@ -312,38 +302,27 @@ export default function DashboardPage() {
               </option>
             ))}
           </select>
-          <FilterCombobox
-            value={campaignInput}
-            options={campaignOptions}
-            onChange={(v) => {
-              setCampaignInput(v);
-              // Input dikosongkan → lepas filter & reload semua
-              if (v.trim() === "" && campaignFilter) setCampaignFilter("");
-            }}
-            onSelect={(v) => {
-              setCampaignInput(v);
-              setCampaignFilter(v); // baru di sini data di-reload
-            }}
-            disabled={!!tagInput}
-            placeholder="Filter nama kampanye Meta…"
-            title={tagInput ? "Nonaktif, sedang memfilter Tag Shopee (kedua filter menyaring pasangan hub yang sama)" : undefined}
-            widthClass="w-56"
+          <SearchSelect
+            items={campaignOptions}
+            value={campaignFilter || null}
+            onChange={(v) => setCampaignFilter((v as string) ?? "")}
+            getKey={(c) => c}
+            displayFn={(c) => c}
+            allLabel="Semua kampanye Meta"
+            disabled={!!tagFilter}
+            title={tagFilter ? "Nonaktif, sedang memfilter Tag Shopee (kedua filter menyaring pasangan hub yang sama)" : undefined}
+            className="w-56"
           />
-          <FilterCombobox
-            value={tagInput}
-            options={tagOptions}
-            onChange={(v) => {
-              setTagInput(v);
-              if (v.trim() === "" && tagFilter) setTagFilter("");
-            }}
-            onSelect={(v) => {
-              setTagInput(v);
-              setTagFilter(v);
-            }}
-            disabled={!!campaignInput}
-            placeholder="Filter Tag Shopee…"
-            title={campaignInput ? "Nonaktif, sedang memfilter nama kampanye Meta (kedua filter menyaring pasangan hub yang sama)" : undefined}
-            widthClass="w-48"
+          <SearchSelect
+            items={tagOptions}
+            value={tagFilter || null}
+            onChange={(v) => setTagFilter((v as string) ?? "")}
+            getKey={(t) => t}
+            displayFn={(t) => t}
+            allLabel="Semua Tag Shopee"
+            disabled={!!campaignFilter}
+            title={campaignFilter ? "Nonaktif, sedang memfilter nama kampanye Meta (kedua filter menyaring pasangan hub yang sama)" : undefined}
+            className="w-48"
           />
           <select
             value={deliveryFilter}
@@ -395,19 +374,15 @@ export default function DashboardPage() {
               </option>
             ))}
           </select>
-          <input
-            type="text"
-            list="l3-kategori-list"
-            value={l3Input}
-            onChange={(e) => setL3Input(e.target.value)}
-            placeholder="L3 kategori…"
-            className="px-3 py-1.5 border rounded-md text-sm w-48"
+          <SearchSelect
+            items={l3Categories}
+            value={l3Filter || null}
+            onChange={(v) => setL3Filter((v as string) ?? "")}
+            getKey={(c) => c}
+            displayFn={(c) => c}
+            allLabel="Semua L3 kategori"
+            className="w-48"
           />
-          <datalist id="l3-kategori-list">
-            {l3Categories.map((c) => (
-              <option key={c} value={c} />
-            ))}
-          </datalist>
           <select
             value={platformFilter}
             onChange={(e) => setPlatformFilter(e.target.value)}
@@ -432,20 +407,17 @@ export default function DashboardPage() {
             />
             Belum tertaut
           </label>
-          {(metaAccountFilter || shopeeAccountFilter || campaignInput || tagInput || regionFilter || deliveryFilter || statusFilter || l1Filter || l3Input || platformFilter) && (
+          {(metaAccountFilter || shopeeAccountFilter || campaignFilter || tagFilter || regionFilter || deliveryFilter || statusFilter || l1Filter || l3Filter || platformFilter) && (
             <button
               onClick={() => {
                 setMetaAccountFilter("");
                 setShopeeAccountFilter("");
-                setCampaignInput("");
                 setCampaignFilter("");
-                setTagInput("");
                 setTagFilter("");
                 setRegionFilter("");
                 setDeliveryFilter("");
                 setStatusFilter("");
                 setL1Filter("");
-                setL3Input("");
                 setL3Filter("");
                 setPlatformFilter("");
               }}
@@ -770,98 +742,6 @@ export default function DashboardPage() {
         </div>
       </div>
     </DashboardLayout>
-  );
-}
-
-// Input filter dengan dropdown saran. Mengetik/paste HANYA membuka list
-// (walau hasil cuma satu; kosong → item "Tidak ditemukan"), data baru
-// di-reload setelah item dipilih (klik / Enter), via onSelect.
-function FilterCombobox({
-  value,
-  options,
-  onChange,
-  onSelect,
-  disabled,
-  placeholder,
-  title,
-  widthClass,
-}: {
-  value: string;
-  options: string[];
-  onChange: (v: string) => void;
-  onSelect: (v: string) => void;
-  disabled?: boolean;
-  placeholder: string;
-  title?: string;
-  widthClass: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [highlight, setHighlight] = useState(0);
-
-  const q = value.trim().toLowerCase();
-  const matches = q ? options.filter((o) => o.toLowerCase().includes(q)) : options;
-
-  const pick = (v: string) => {
-    onSelect(v);
-    setOpen(false);
-  };
-
-  return (
-    <div className={`relative ${widthClass}`}>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => {
-          onChange(e.target.value);
-          setOpen(true);
-          setHighlight(0);
-        }}
-        onFocus={() => value.trim() && setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") setOpen(false);
-          if (!open || matches.length === 0) return;
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            setHighlight((h) => Math.min(h + 1, matches.length - 1));
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            setHighlight((h) => Math.max(h - 1, 0));
-          } else if (e.key === "Enter") {
-            e.preventDefault();
-            pick(matches[Math.min(highlight, matches.length - 1)]);
-          }
-        }}
-        disabled={disabled}
-        placeholder={placeholder}
-        title={title}
-        className="w-full px-3 py-1.5 border rounded-md text-sm disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
-      />
-      {open && !disabled && (
-        <ul className="absolute z-20 top-full left-0 mt-1 min-w-full w-max max-w-md bg-white border rounded-md shadow-lg max-h-64 overflow-y-auto text-sm">
-          {matches.length === 0 ? (
-            <li className="px-3 py-2 text-muted-foreground italic">Tidak ditemukan</li>
-          ) : (
-            matches.map((o, i) => (
-              <li
-                key={o}
-                // onMouseDown (bukan onClick) agar terpicu sebelum blur input menutup list
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  pick(o);
-                }}
-                onMouseEnter={() => setHighlight(i)}
-                className={`px-3 py-2 cursor-pointer ${
-                  i === highlight ? "bg-gray-100" : ""
-                }`}
-              >
-                {o}
-              </li>
-            ))
-          )}
-        </ul>
-      )}
-    </div>
   );
 }
 
