@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { spendWithPpn } from "@/lib/utils";
 
 function parseDateUtc(dateStr: string): Date {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -171,7 +172,8 @@ export async function GET(request: NextRequest) {
       return ratioByDate.get(dt.toISOString().slice(0, 10)) ?? periodRatio;
     };
 
-    const totalSpend = dailyStats.reduce((s, d) => s + d.spendIDR, 0);
+    // spend termasuk PPN 11% (biaya iklan riil) → menular ke roas/cpc & totals
+    const totalSpend = spendWithPpn(dailyStats.reduce((s, d) => s + d.spendIDR, 0));
     const totalImpressions = dailyStats.reduce((s, d) => s + d.impressions, 0);
     const totalUniqueClicks = dailyStats.reduce((s, d) => s + d.uniqueLinkClicks, 0);
 
@@ -355,7 +357,7 @@ export async function GET(request: NextRequest) {
       },
     });
     for (const c of unlinkedMeta) {
-      const s = c.dailyStats.reduce((sum, d) => sum + d.spendIDR, 0);
+      const s = spendWithPpn(c.dailyStats.reduce((sum, d) => sum + d.spendIDR, 0));
       if (s > 0) {
         spendTanpaTautan.spend += s;
         spendTanpaTautan.campaigns++;

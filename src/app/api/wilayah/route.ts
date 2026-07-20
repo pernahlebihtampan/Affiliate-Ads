@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { spendWithPpn } from "@/lib/utils";
 
 function parseDateUtc(dateStr: string): Date {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -162,7 +163,10 @@ export async function GET(request: NextRequest) {
       regionSpendSum.set(d.region, (regionSpendSum.get(d.region) || 0) + d.spendIDR);
 
       const a = getAcc(d.region);
-      a.spend += d.spendIDR;
+      // spend termasuk PPN 11% (biaya iklan riil) → menular ke profit/roas/cpc.
+      // regionSpendByDate/regionSpendSum di atas tetap mentah (rasio prorata,
+      // faktor 1,11 saling meniadakan).
+      a.spend += spendWithPpn(d.spendIDR);
       a.impressions += d.impressions;
       a.metaClicks += d.uniqueLinkClicks;
       a.shopClicks += d.shopClicks;

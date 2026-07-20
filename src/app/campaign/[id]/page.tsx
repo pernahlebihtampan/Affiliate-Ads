@@ -107,7 +107,7 @@ export default function CampaignDetailPage() {
 
         {/* Summary Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <SummaryCard label="Total Spend" value={formatCurrency(totalSpend)} />
+          <SummaryCard label="Total Spend" value={formatCurrency(totalSpend)} sub="termasuk PPN 11%" />
           <SummaryCard label="Total Klik" value={formatNumber(totalClicks)} />
           <SummaryCard label="Impresi" value={formatNumber(totalImpressions)} />
           <SummaryCard
@@ -225,7 +225,7 @@ export default function CampaignDetailPage() {
               <thead>
                 <tr className="bg-gray-50">
                   <th className="text-left p-2 font-medium">Tanggal</th>
-                  <th className="text-right p-2 font-medium">Spend</th>
+                  <th className="text-right p-2 font-medium">Spend +PPN</th>
                   <th className="text-right p-2 font-medium">Impresi</th>
                   <th className="text-right p-2 font-medium">Jangkauan</th>
                   <th className="text-right p-2 font-medium">Frekuensi</th>
@@ -256,11 +256,20 @@ export default function CampaignDetailPage() {
   );
 }
 
-function SummaryCard({ label, value }: { label: string; value: string }) {
+function SummaryCard({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
   return (
     <div className="bg-white rounded-lg border p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-lg font-semibold mt-1">{value}</p>
+      {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
     </div>
   );
 }

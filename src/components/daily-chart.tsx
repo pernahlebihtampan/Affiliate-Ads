@@ -67,7 +67,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   // batang kini berupa lapisan generik layer1..3 yang namanya tidak informatif
   const entries = [
     { name: "Komisi", value: dp.komisi, color: "#3B82F6" },
-    { name: "Pengeluaran (Spend)", value: dp.spend, color: "#EAB308" },
+    { name: "Pengeluaran (Spend +PPN)", value: dp.spend, color: "#EAB308" },
     { name: "Keuntungan (Komisi - Spend)", value: dp.profit, color: "#FFFFFF" },
     {
       name: "Keuntungan Selesai (Komisi Selesai - Spend)",
@@ -119,7 +119,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 
 const LEGEND_ITEMS = [
   { value: "Komisi", color: "#3B82F6" },
-  { value: "Pengeluaran (Spend)", color: "#EAB308" },
+  { value: "Pengeluaran (Spend +PPN)", color: "#EAB308" },
   { value: "Keuntungan (Komisi - Spend)", color: "#FFFFFF" },
   { value: "Keuntungan Selesai (Komisi Selesai - Spend)", color: "#22C55E" },
   { value: "Komisi Dibatalkan (estimasi)", color: "#9CA3AF" },
@@ -238,7 +238,7 @@ export function DailyChart({ data }: DailyChartProps) {
           <Line
             type="monotone"
             dataKey="spend"
-            name="Pengeluaran (Spend)"
+            name="Pengeluaran (Spend +PPN)"
             stroke="#EAB308"
             strokeWidth={2}
             dot={{ r: 3, fill: "#EAB308", strokeWidth: 0 }}

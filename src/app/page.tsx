@@ -457,7 +457,7 @@ export default function DashboardPage() {
         {/* Summary Cards */}
         {totals && (
           <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4">
-            <SummaryCard label="Total Spend" value={formatCurrency(totals.spend)} />
+            <SummaryCard label="Total Spend" value={formatCurrency(totals.spend)} sub="termasuk PPN 11%" />
             <SummaryCard
               label={regionFilter ? "Total Komisi (estimasi)" : "Total Komisi"}
               value={(regionFilter ? "±" : "") + formatCurrency(totals.totalKomisi)}
@@ -549,7 +549,7 @@ export default function DashboardPage() {
                   <SortableTh label="Kampanye Meta" sortKeyName="metaCampaignName" align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortableTh label="Akun" sortKeyName="metaAccountName" align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortableTh label="Tag Shopee" sortKeyName="shopeeCampaignName" align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortableTh label="Spend" sortKeyName="spend" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortableTh label="Spend +PPN" sortKeyName="spend" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortableTh label="Klik Meta" sortKeyName="metaClicks" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortableTh label="Klik Shopee" sortKeyName="shopeeClicks" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortableTh label="Pesanan" sortKeyName="orders" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />

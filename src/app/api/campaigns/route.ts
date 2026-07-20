@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { spendWithPpn } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -38,14 +39,20 @@ export async function GET(request: NextRequest) {
           acc.landingPageViews += stat.landingPageViews;
         }
       }
-      const aggregated = [...byDate.values()].map((s) => ({
-        ...s,
-        frequency: s.reach > 0 ? s.impressions / s.reach : 0,
-        cpc: s.uniqueLinkClicks > 0 ? s.spendIDR / s.uniqueLinkClicks : 0,
-        ctr: s.impressions > 0 ? s.uniqueLinkClicks / s.impressions : 0,
-        cpm: s.impressions > 0 ? (s.spendIDR / s.impressions) * 1000 : 0,
-        costPerResult: s.results > 0 ? s.spendIDR / s.results : 0,
-      }));
+      const aggregated = [...byDate.values()].map((s) => {
+        // spend termasuk PPN 11% (biaya iklan riil) — dipakai untuk tampilan
+        // spend harian & semua turunannya (cpc/cpm/cost per result)
+        const spendIDR = spendWithPpn(s.spendIDR);
+        return {
+          ...s,
+          spendIDR,
+          frequency: s.reach > 0 ? s.impressions / s.reach : 0,
+          cpc: s.uniqueLinkClicks > 0 ? spendIDR / s.uniqueLinkClicks : 0,
+          ctr: s.impressions > 0 ? s.uniqueLinkClicks / s.impressions : 0,
+          cpm: s.impressions > 0 ? (spendIDR / s.impressions) * 1000 : 0,
+          costPerResult: s.results > 0 ? spendIDR / s.results : 0,
+        };
+      });
 
       // Get linked Shopee data
       const shopeeData = campaign.hub

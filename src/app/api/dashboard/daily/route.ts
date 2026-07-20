@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { spendWithPpn } from "@/lib/utils";
 
 function parseDateUtc(dateStr: string): Date {
   // Parse YYYY-MM-DD sebagai UTC agar konsisten dengan DateTime di database
@@ -235,7 +236,8 @@ export async function GET(request: NextRequest) {
     const dateKey = current.toISOString().split("T")[0];
     const komisi = komisiMap.get(dateKey) || 0;
     const komisiSelesai = komisiSelesaiMap.get(dateKey) || 0;
-    const spend = spendMap.get(dateKey) || 0;
+    // spend grafik termasuk PPN 11% (biaya iklan riil) — sejajar dashboard
+    const spend = spendWithPpn(spendMap.get(dateKey) || 0);
     dailyData.push({
       date: dateKey,
       komisi,

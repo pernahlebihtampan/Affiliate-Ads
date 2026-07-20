@@ -19,6 +19,20 @@ export function formatNumber(value: number): string {
 }
 
 /**
+ * PPN 11% atas biaya iklan Meta. CSV Meta ("Jumlah yang dibelanjakan (IDR)")
+ * BELUM termasuk pajak; MetaAdDaily.spendIDR menyimpan angka mentah itu apa
+ * adanya (aturan "simpan CSV mentah"). Semua angka biaya/profit/ROAS/CPC/CPM
+ * di UI memakai spend TERMASUK PPN, jadi biaya iklan riil = spendIDR × 1,11.
+ * Terapkan helper ini di titik AGREGASI spend saat baca (bukan saat impor).
+ * Catatan: pada rasio prorata (spend_wilayah / spend_total) faktor 1,11 saling
+ * meniadakan — di situ pakai spendIDR mentah, tidak perlu helper ini.
+ */
+export const PPN_RATE = 0.11;
+export function spendWithPpn(spendIdr: number): number {
+  return spendIdr * (1 + PPN_RATE);
+}
+
+/**
  * Rentang tanggal default untuk halaman analisis: 30 hari sebelum kemarin
  * s/d kemarin. Hari berjalan sengaja dikecualikan — datanya belum lengkap
  * sebelum CSV berikutnya diimpor, sehingga angka hari ini selalu tampak anjlok.

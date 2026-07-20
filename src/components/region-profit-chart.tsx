@@ -42,7 +42,7 @@ function RegionTooltip({
   if (!r) return null;
 
   const rows = [
-    { name: "Spend", value: formatCurrency(r.spend) },
+    { name: "Spend +PPN", value: formatCurrency(r.spend) },
     { name: "Komisi (estimasi)", value: "±" + formatCurrency(r.totalKomisi) },
     { name: "Keuntungan", value: "±" + formatCurrency(r.profit) },
     { name: "Pesanan", value: "±" + formatNumber(r.orders) },

@@ -355,7 +355,7 @@ export default function WilayahPage() {
         {/* Summary Cards */}
         {totals && (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            <SummaryCard label="Total Spend" value={formatCurrency(totals.spend)} />
+            <SummaryCard label="Total Spend" value={formatCurrency(totals.spend)} sub="termasuk PPN 11%" />
             <SummaryCard
               label="Total Komisi (estimasi)"
               value={"±" + formatCurrency(totals.totalKomisi)}
@@ -411,7 +411,7 @@ export default function WilayahPage() {
                 <tr className="bg-gray-50 border-b">
                   <SortableTh label="Wilayah" sortKeyName="region" align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortableTh label="Kampanye" sortKeyName="campaigns" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortableTh label="Spend" sortKeyName="spend" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortableTh label="Spend +PPN" sortKeyName="spend" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortableTh label="Impresi" sortKeyName="impressions" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortableTh label="Klik Meta" sortKeyName="metaClicks" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortableTh label="CTR" sortKeyName="ctr" align="right" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
