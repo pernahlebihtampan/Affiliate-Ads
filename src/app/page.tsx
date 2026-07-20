@@ -241,7 +241,7 @@ export default function DailyDashboardPage() {
             >
               <p className="text-xs text-muted-foreground mb-2">Tanggal laporan impor</p>
               <div className="flex items-center gap-4 flex-wrap">
-                <span className="text-3xl" aria-hidden>📅</span>
+                <span className="text-3xl" aria-hidden>🗓️</span>
                 <DateInput
                   value={date}
                   onChange={setDate}
