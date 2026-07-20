@@ -134,6 +134,19 @@ export async function importMetaAdCsv(
   // (kampanye, tanggal) yang baris agregat lamanya (region="") sudah dibersihkan
   const legacyCleaned = new Set<string>();
 
+  // Baris riwayat insert-only untuk snapshot Dasbor Harian — hanya impor
+  // ber-reportDate. Map ber-kunci-unik meniru semantik upsert (baris terakhir
+  // menang) sekaligus dedup dalam-file: createMany SQLite tak punya skipDuplicates.
+  const metaHistory = reportDate
+    ? new Map<
+        string,
+        {
+          importBatchId: number; metaCampaignId: number; date: Date; region: string;
+          spendIDR: number; impressions: number; uniqueLinkClicks: number; delivery: string;
+        }
+      >()
+    : null;
+
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     // Tanggal Meta (WIB) disimpan sebagai 00:00Z tanggal kalender → bucket harian = tanggal WIB.
@@ -197,6 +210,12 @@ export async function importMetaAdCsv(
       result.inserted++;
     }
 
+    metaHistory?.set(`${campaign.id}|${startDate.toISOString()}|${row.region}`, {
+      importBatchId: importBatch.id, metaCampaignId: campaign.id, date: startDate,
+      region: row.region, spendIDR: row.spend, impressions: row.impressions,
+      uniqueLinkClicks: row.uniqueLinkClicks, delivery: row.delivery,
+    });
+
     rows[i] = null as never; // lepaskan baris terproses agar bisa di-GC (file besar)
     if ((i + 1) % YIELD_EVERY === 0) {
       await yieldEventLoop();
@@ -206,6 +225,14 @@ export async function importMetaAdCsv(
     }
     if ((i + 1) % BATCH_SIZE === 0) {
       await saveProgress(importBatch.id, result);
+    }
+  }
+
+  if (metaHistory) {
+    const hist = [...metaHistory.values()];
+    for (let j = 0; j < hist.length; j += BATCH_SIZE) {
+      await prisma.metaAdDailyHistory.createMany({ data: hist.slice(j, j + BATCH_SIZE) });
+      await yieldEventLoop();
     }
   }
 
@@ -456,6 +483,19 @@ export async function importShopeeCommissionCsv(
   const existingCampaigns = await prisma.shopeeCampaign.findMany({ where: { shopeeAccountId } });
   const campaignMap = new Map(existingCampaigns.map(c => [c.name.toLowerCase(), c.id]));
 
+  // Baris riwayat insert-only untuk snapshot Dasbor Harian (lihat metaHistory).
+  // SEMUA status disimpan termasuk Dibatalkan — difilter saat baca snapshot.
+  const orderHistory = reportDate
+    ? new Map<
+        string,
+        {
+          importBatchId: number; idPemesanan: string; idBarang: string;
+          idModel: string; idPromosi: string; shopeeCampaignId: number | null;
+          statusPesanan: string; komisiBersihRp: number; nilaiPembelianRp: number;
+        }
+      >()
+    : null;
+
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
 
@@ -535,6 +575,12 @@ export async function importShopeeCommissionCsv(
       result.inserted++;
     }
 
+    orderHistory?.set(`${pk.idPemesanan}|${pk.idBarang}|${pk.idModel}|${pk.idPromosi}`, {
+      importBatchId: importBatch.id, ...pk, shopeeCampaignId: campaignId,
+      statusPesanan: row.statusPesanan, komisiBersihRp: row.komisiBersihRp,
+      nilaiPembelianRp: row.nilaiPembelianRp,
+    });
+
     rows[i] = null as never; // lepaskan baris terproses agar bisa di-GC (file besar)
     if ((i + 1) % YIELD_EVERY === 0) {
       await yieldEventLoop();
@@ -544,6 +590,14 @@ export async function importShopeeCommissionCsv(
     }
     if ((i + 1) % BATCH_SIZE === 0) {
       await saveProgress(importBatch.id, result);
+    }
+  }
+
+  if (orderHistory) {
+    const hist = [...orderHistory.values()];
+    for (let j = 0; j < hist.length; j += BATCH_SIZE) {
+      await prisma.shopeeOrderItemHistory.createMany({ data: hist.slice(j, j + BATCH_SIZE) });
+      await yieldEventLoop();
     }
   }
 

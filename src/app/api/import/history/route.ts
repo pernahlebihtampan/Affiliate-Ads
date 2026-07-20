@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { computeAndStoreDailySnapshot } from "@/lib/daily-snapshot";
 
 export async function GET() {
   const history = await prisma.importBatch.findMany({
@@ -60,9 +61,29 @@ export async function DELETE(request: Request) {
     const { count } = await m.deleteMany({ where: { firstImportId: id } });
     // Baris yang cuma di-update batch ini tetap ada — bersihkan pointer menggantung.
     await m.updateMany({ where: { lastImportId: id }, data: { lastImportId: null } });
+    // Baris riwayat snapshot Dasbor Harian milik batch ini (insert-only).
+    if (batch.type === "meta") {
+      await tx.metaAdDailyHistory.deleteMany({ where: { importBatchId: id } });
+    } else if (batch.type === "shopee_commission") {
+      await tx.shopeeOrderItemHistory.deleteMany({ where: { importBatchId: id } });
+    }
     await tx.importBatch.delete({ where: { id } });
     return count as number;
   });
+
+  // Segarkan snapshot Dasbor Harian tanggal ini: batch same-date sebelumnya
+  // (bila ada) otomatis jadi sumber terbaru; bila tak ada batch tersisa,
+  // snapshot-nya ikut dihapus.
+  if (batch.reportDate) {
+    const remaining = await prisma.importBatch.count({
+      where: { reportDate: batch.reportDate },
+    });
+    if (remaining > 0) {
+      await computeAndStoreDailySnapshot(batch.reportDate);
+    } else {
+      await prisma.dailySnapshot.deleteMany({ where: { reportDate: batch.reportDate } });
+    }
+  }
 
   return NextResponse.json({ success: true, rowsDeleted: deleted });
 }

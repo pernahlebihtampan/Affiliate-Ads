@@ -232,6 +232,45 @@ model ShopeeClick {
   shopeeCampaign ShopeeCampaign? @relation(fields: [shopeeCampaignId], references: [id])
 }
 
+// Riwayat insert-only per-batch — HANYA untuk komputasi DailySnapshot (tab
+// Laporan & Rentang). Tiap impor Meta ber-reportDate menyalin baris file apa
+// adanya ke sini; TIDAK PERNAH di-update, sehingga "Hitung ulang" tanggal lama
+// selalu mereproduksi angka saat file itu diimpor (tabel utama boleh berubah
+// oleh upsert impor berikutnya). Kolom ramping: hanya yang dibaca laporan.
+model MetaAdDailyHistory {
+  id               Int      @id @default(autoincrement())
+  importBatchId    Int
+  metaCampaignId   Int
+  date             DateTime
+  region           String   @default("")
+  spendIDR         Float    @default(0)
+  impressions      Int      @default(0)
+  uniqueLinkClicks Int      @default(0)
+  delivery         String   @default("")
+
+  @@unique([importBatchId, metaCampaignId, date, region])
+  @@index([importBatchId])
+}
+
+// Padanan riwayat untuk ShopeeOrderItem (lihat MetaAdDailyHistory). Semua
+// status disimpan termasuk Dibatalkan (difilter saat baca, sama seperti tabel
+// utama). shopeeCampaignId null = organik (tak tampil di laporan harian).
+model ShopeeOrderItemHistory {
+  id               Int    @id @default(autoincrement())
+  importBatchId    Int
+  idPemesanan      String
+  idBarang         String
+  idModel          String
+  idPromosi        String
+  shopeeCampaignId Int?
+  statusPesanan    String
+  komisiBersihRp   Float  @default(0)
+  nilaiPembelianRp Float  @default(0)
+
+  @@unique([importBatchId, idPemesanan, idBarang, idModel, idPromosi])
+  @@index([importBatchId])
+}
+
 model ImportBatch {
   id             Int      @id @default(autoincrement())
   type           String
