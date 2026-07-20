@@ -133,10 +133,11 @@ export default function DashboardPage() {
   // L3: pilih satu kategori (di rentang tanggal) lewat combobox berpencarian
   const [l3Filter, setL3Filter] = useState("");
   const [platformFilter, setPlatformFilter] = useState("");
-  // Toggle baris "Belum tertaut" (kampanye Shopee bertag tanpa hub). Bukan
-  // filter data, hanya mode tampilan, jadi tidak ikut "Bersihkan filter".
-  // Dikirim ke API (unlinked=0) agar totals & grafik konsisten dengan tabel.
-  const [showUnlinked, setShowUnlinked] = useState(true);
+  // Pilihan tautan hub: semua / hanya tertaut / hanya "Belum tertaut"
+  // (kampanye Shopee bertag tanpa hub). Mode tampilan, jadi tidak ikut
+  // "Bersihkan filter". Dikirim ke API (unlinked=0|only) agar totals & grafik
+  // konsisten dengan tabel.
+  const [linkFilter, setLinkFilter] = useState<"all" | "linked" | "unlinked">("all");
   const [statuses, setStatuses] = useState<string[]>([]);
   const [l1Categories, setL1Categories] = useState<string[]>([]);
   const [l3Categories, setL3Categories] = useState<string[]>([]);
@@ -171,7 +172,8 @@ export default function DashboardPage() {
       if (l1Filter) params.set("l1", l1Filter);
       if (l3Filter) params.set("l3", l3Filter);
       if (platformFilter) params.set("platform", platformFilter);
-      if (!showUnlinked) params.set("unlinked", "0");
+      if (linkFilter === "linked") params.set("unlinked", "0");
+      else if (linkFilter === "unlinked") params.set("unlinked", "only");
 
       // Fetch main dashboard data
       const res = await fetch(`/api/dashboard?${params}`);
@@ -198,7 +200,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, metaAccountFilter, shopeeAccountFilter, campaignFilter, tagFilter, regionFilter, deliveryFilter, statusFilter, l1Filter, l3Filter, platformFilter, showUnlinked]);
+  }, [fromDate, toDate, metaAccountFilter, shopeeAccountFilter, campaignFilter, tagFilter, regionFilter, deliveryFilter, statusFilter, l1Filter, l3Filter, platformFilter, linkFilter]);
 
   useEffect(() => {
     fetchData();
@@ -395,18 +397,16 @@ export default function DashboardPage() {
               </option>
             ))}
           </select>
-          <label
-            className="flex items-center gap-1.5 px-3 py-1.5 border rounded-md text-sm bg-white cursor-pointer select-none"
-            title="Tampilkan/sembunyikan kampanye Shopee bertag yang belum ditautkan di Pusat Kampanye (baris amber, spend 0). Totals & grafik ikut menyesuaikan."
+          <select
+            value={linkFilter}
+            onChange={(e) => setLinkFilter(e.target.value as "all" | "linked" | "unlinked")}
+            className="px-3 py-1.5 border rounded-md text-sm bg-white"
+            title='Saring berdasarkan status tautan di Pusat Kampanye: Tertaut = kampanye Meta ber-hub; Belum tertaut = kampanye Shopee bertag tanpa hub (baris amber, spend 0). Totals & grafik ikut menyesuaikan.'
           >
-            <input
-              type="checkbox"
-              checked={showUnlinked}
-              onChange={(e) => setShowUnlinked(e.target.checked)}
-              className="accent-amber-500"
-            />
-            Belum tertaut
-          </label>
+            <option value="all">Semua tautan</option>
+            <option value="linked">Tertaut</option>
+            <option value="unlinked">Belum tertaut</option>
+          </select>
           {(metaAccountFilter || shopeeAccountFilter || campaignFilter || tagFilter || regionFilter || deliveryFilter || statusFilter || l1Filter || l3Filter || platformFilter) && (
             <button
               onClick={() => {
@@ -439,7 +439,7 @@ export default function DashboardPage() {
               Unmapped tidak ikut tersaring (data organik tak punya sisi Meta).
             </span>
           )}
-          {showUnlinked && (metaAccountFilter || campaignFilter || regionFilter || deliveryFilter) && (
+          {linkFilter !== "linked" && (metaAccountFilter || campaignFilter || regionFilter || deliveryFilter) && (
             <span className="text-xs text-muted-foreground">
               ℹ️ Baris <i>Belum tertaut</i> disembunyikan saat filter akun Meta /
               kampanye / wilayah / penayangan aktif (tidak punya sisi Meta).

@@ -320,10 +320,12 @@ export async function GET(request: NextRequest) {
   // tetap ditampilkan sebagai baris terpisah (spend 0) supaya tidak "hilang"
   // dari dashboard. Disembunyikan bila filter sisi-Meta aktif (akun Meta /
   // kampanye / wilayah / penayangan) karena tidak ada sisi Meta untuk
-  // dicocokkan/diprorata, atau saat toggle "Belum tertaut" di UI dimatikan
-  // (`unlinked=0` — totals & grafik ikut mengecualikan agar konsisten dengan
-  // tabel).
-  const includeUnlinked = url.searchParams.get("unlinked") !== "0";
+  // dicocokkan/diprorata, atau mengikuti pilihan tautan di UI: `unlinked=0` =
+  // hanya tertaut, `unlinked=only` = hanya belum-tertaut (totals & grafik ikut
+  // menyesuaikan agar konsisten dengan tabel).
+  const linkParam = url.searchParams.get("unlinked");
+  const includeLinked = linkParam !== "only";
+  const includeUnlinked = linkParam !== "0";
   const showUnlinked =
     includeUnlinked && !metaAdAccountId && !campaignQuery && !region && !deliveryFilter;
   const unlinkedCampaigns = showUnlinked
@@ -389,7 +391,9 @@ export async function GET(request: NextRequest) {
     (r) => !tagQuery || r.shopeeCampaignName.toLowerCase() === tagQuery
   );
 
-  const allRows = [...rows, ...unlinkedRows];
+  // Baris hub tetap dihitung meski disembunyikan (`unlinked=only`) — opsi
+  // dropdown kampanye/tag di atas butuh daftar lengkap.
+  const allRows = [...(includeLinked ? rows : []), ...unlinkedRows];
 
   // Tag belum-tertaut ikut ditawarkan di dropdown filter Tag Shopee —
   // dari unlinkedWithData (sebelum filter tag) supaya list tetap lengkap

@@ -92,7 +92,13 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  const hubs = allHubs.filter((h) => {
+  // Pilihan tautan di UI: `unlinked=0` = hanya tertaut, `unlinked=only` =
+  // hanya belum-tertaut (seri spend & komisi hub dikosongkan).
+  const linkParam = url.searchParams.get("unlinked");
+  const includeLinked = linkParam !== "only";
+  const includeUnlinked = linkParam !== "0";
+
+  const hubs = !includeLinked ? [] : allHubs.filter((h) => {
     if (metaAdAccountId && h.metaCampaign.metaAdAccountId !== metaAdAccountId) return false;
     if (shopeeAccountId && h.shopeeCampaign.shopeeAccountId !== shopeeAccountId) return false;
     // Exact match case-insensitive — nilai dikirim UI dari pilihan dropdown
@@ -143,9 +149,8 @@ export async function GET(request: NextRequest) {
   // Kampanye Shopee belum-tertaut di Hub — komisinya ikut di seri grafik
   // (konsisten dengan baris terpisah di tabel /api/dashboard). Aturan skip
   // sama: sembunyikan bila filter sisi-Meta aktif (tak ada sisi Meta untuk
-  // dicocokkan/diprorata) atau toggle UI dimatikan (`unlinked=0`); filter tag
-  // exact match diterapkan.
-  const includeUnlinked = url.searchParams.get("unlinked") !== "0";
+  // dicocokkan/diprorata) atau pilihan tautan "Tertaut" (`unlinked=0`); filter
+  // tag exact match diterapkan.
   const showUnlinked =
     includeUnlinked && !metaAdAccountId && !campaignQuery && !region && !deliveryFilter;
   const unlinkedCampaigns = showUnlinked
