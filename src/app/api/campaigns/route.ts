@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
         where: { id: parseInt(id) },
         include: {
           metaAdAccount: true,
-          hub: { include: { shopeeCampaign: true } },
+          hubs: { include: { shopeeCampaign: true } },
           dailyStats: { orderBy: { date: "asc" } },
         },
       });
@@ -54,10 +54,12 @@ export async function GET(request: NextRequest) {
         };
       });
 
-      // Get linked Shopee data
-      const shopeeData = campaign.hub
-        ? await getShopeeCampaignDetail(campaign.hub.shopeeCampaignId)
-        : null;
+      // Get linked Shopee data — gabung SEMUA tag Shopee yang tertaut ke Meta
+      // ini (1 Meta : banyak Shopee)
+      const shopeeData =
+        campaign.hubs.length > 0
+          ? await getShopeeCampaignDetail(campaign.hubs.map((h) => h.shopeeCampaignId))
+          : null;
 
       return NextResponse.json({
         campaign: { ...campaign, dailyStats: aggregated },
@@ -81,7 +83,7 @@ export async function GET(request: NextRequest) {
   const metaCampaigns = await prisma.metaCampaign.findMany({
     include: {
       metaAdAccount: true,
-      hub: { include: { shopeeCampaign: true } },
+      hubs: { include: { shopeeCampaign: true } },
     },
     orderBy: { name: "asc" },
   });
@@ -89,15 +91,15 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(metaCampaigns);
 }
 
-async function getShopeeCampaignDetail(campaignId: number) {
+async function getShopeeCampaignDetail(campaignIds: number[]) {
   const items = await prisma.shopeeOrderItem.findMany({
-    where: { shopeeCampaignId: campaignId },
+    where: { shopeeCampaignId: { in: campaignIds } },
     orderBy: { orderTimeUTC: "desc" },
     take: 50,
   });
 
   const clicks = await prisma.shopeeClick.findMany({
-    where: { shopeeCampaignId: campaignId },
+    where: { shopeeCampaignId: { in: campaignIds } },
     orderBy: { clickTimeUTC: "desc" },
     take: 100,
   });

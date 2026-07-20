@@ -3,11 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { suggestConnections, type DailySeries } from "@/lib/matching-engine";
 
 export async function GET() {
-  // Get all Meta campaigns
+  // Get all Meta campaigns (1 Meta : banyak Shopee → hubs[])
   const metaCampaigns = await prisma.metaCampaign.findMany({
     include: {
       metaAdAccount: true,
-      hub: { include: { shopeeCampaign: true } },
+      hubs: { include: { shopeeCampaign: true } },
     },
     orderBy: { name: "asc" },
   });
@@ -31,40 +31,44 @@ export async function POST(request: NextRequest) {
   if (body.action === "link") {
     const { metaCampaignId, shopeeCampaignId } = body;
 
-    // Validasi: jika ShopeeCampaign sudah terhubung ke Meta lain, putus dulu
-    const existingHub = await prisma.campaignHub.findUnique({
-      where: { shopeeCampaignId },
-    });
-    if (existingHub && existingHub.metaCampaignId !== metaCampaignId) {
-      // Shopee ini sudah terhubung ke Meta lain — putus yang lama
-      await prisma.campaignHub.delete({
-        where: { metaCampaignId: existingHub.metaCampaignId },
-      });
-    }
-
+    // 1 Shopee : 1 Meta (shopeeCampaignId @unique). Satu Meta boleh punya
+    // banyak tautan Shopee, jadi upsert by shopeeCampaignId: kalau Shopee ini
+    // sudah tertaut (ke Meta manapun), pindahkan ke Meta yang diminta;
+    // kalau belum, buat baru.
     const hub = await prisma.campaignHub.upsert({
-      where: { metaCampaignId },
-      update: { shopeeCampaignId },
+      where: { shopeeCampaignId },
+      update: { metaCampaignId },
       create: { metaCampaignId, shopeeCampaignId },
     });
     return NextResponse.json(hub);
   }
 
   if (body.action === "unlink") {
-    await prisma.campaignHub.delete({
-      where: { metaCampaignId: body.metaCampaignId },
-    });
+    // Putus satu tautan spesifik. Prioritas shopeeCampaignId (unik → satu
+    // tautan tepat); fallback ke metaCampaignId (putus semua tautan Meta itu).
+    if (body.shopeeCampaignId != null) {
+      await prisma.campaignHub.delete({
+        where: { shopeeCampaignId: body.shopeeCampaignId },
+      });
+    } else {
+      await prisma.campaignHub.deleteMany({
+        where: { metaCampaignId: body.metaCampaignId },
+      });
+    }
     return NextResponse.json({ success: true });
   }
 
   if (body.action === "suggest") {
+    // Shopee yang belum tertaut ke Meta manapun.
     const shopeeCampaigns = await prisma.shopeeCampaign.findMany({
       where: { hub: null },
       include: { shopeeAccount: true, hub: true },
     });
+    // Semua Meta yang punya spend — termasuk yang SUDAH punya tautan, karena
+    // satu Meta bisa ditautkan ke beberapa tag Shopee.
     const metaCampaigns = await prisma.metaCampaign.findMany({
-      where: { hub: null, dailyStats: { some: { spendIDR: { gt: 0 } } } },
-      include: { metaAdAccount: true, hub: { include: { shopeeCampaign: true } } },
+      where: { dailyStats: { some: { spendIDR: { gt: 0 } } } },
+      include: { metaAdAccount: true, hubs: { include: { shopeeCampaign: true } } },
     });
 
     // === Deret aktivitas harian untuk sinyal data (lihat lib/matching-engine) ===

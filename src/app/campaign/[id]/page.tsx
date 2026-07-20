@@ -24,7 +24,7 @@ interface CampaignDetail {
     name: string;
     status: string;
     metaAdAccount: { name: string };
-    hub: { shopeeCampaign: { id: number; name: string } } | null;
+    hubs: { shopeeCampaign: { id: number; name: string } }[];
     dailyStats: DailyStat[];
   };
   shopeeData: {
@@ -97,9 +97,12 @@ export default function CampaignDetailPage() {
           <h1 className="text-2xl font-bold mt-1">{campaign.name}</h1>
           <p className="text-sm text-muted-foreground">
             {campaign.metaAdAccount.name} · Status: {campaign.status}
-            {campaign.hub && (
+            {campaign.hubs.length > 0 && (
               <span className="ml-2">
-                · Tag Shopee: <strong>{campaign.hub.shopeeCampaign.name}</strong>
+                · Tag Shopee:{" "}
+                <strong>
+                  {campaign.hubs.map((h) => h.shopeeCampaign.name).join(", ")}
+                </strong>
               </span>
             )}
           </p>

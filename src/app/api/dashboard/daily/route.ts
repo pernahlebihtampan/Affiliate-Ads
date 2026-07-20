@@ -106,15 +106,20 @@ export async function GET(request: NextRequest) {
   // filter aktif), sekaligus rasio prorata per (hub, tanggal) untuk komisi.
   const spendMap = new Map<string, number>();
   const ratioByHubDate = region ? new Map<number, Map<string, number>>() : null;
-  // Fallback rasio level periode per hub — dipakai untuk tanggal tanpa spend
+  // Fallback rasio level periode per Meta — dipakai untuk tanggal tanpa spend
   // agar komisi hari jeda iklan tetap terdistribusi (konsisten /api/dashboard)
   const periodRatioByHub = new Map<number, number>();
-  for (const hub of hubs) {
+  // Spend & rasio dihitung per kampanye Meta UNIK (bukan per hub): beberapa
+  // hub bisa berbagi Meta yang sama (1 Meta : banyak Shopee) dan dailyStats-nya
+  // identik, sehingga menjumlah per hub akan menggandakan spend.
+  const metaById = new Map<number, (typeof hubs)[number]["metaCampaign"]>();
+  for (const hub of hubs) metaById.set(hub.metaCampaignId, hub.metaCampaign);
+  for (const [metaCampaignId, metaCampaign] of metaById) {
     const regionSpend = new Map<string, number>();
     const totalSpend = new Map<string, number>();
     let regionSum = 0;
     let totalSum = 0;
-    for (const stat of hub.metaCampaign.dailyStats) {
+    for (const stat of metaCampaign.dailyStats) {
       const dateKey = stat.date.toISOString().split("T")[0];
       if (region) {
         totalSpend.set(dateKey, (totalSpend.get(dateKey) || 0) + stat.spendIDR);
@@ -130,8 +135,8 @@ export async function GET(request: NextRequest) {
       for (const [k, tot] of totalSpend) {
         if (tot > 0) ratios.set(k, (regionSpend.get(k) || 0) / tot);
       }
-      ratioByHubDate.set(hub.metaCampaignId, ratios);
-      periodRatioByHub.set(hub.metaCampaignId, totalSum > 0 ? regionSum / totalSum : 0);
+      ratioByHubDate.set(metaCampaignId, ratios);
+      periodRatioByHub.set(metaCampaignId, totalSum > 0 ? regionSum / totalSum : 0);
     }
   }
 

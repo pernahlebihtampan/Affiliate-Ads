@@ -126,6 +126,23 @@ export async function GET(request: NextRequest) {
     return true;
   });
 
+  // Kelompokkan per kampanye Meta (1 Meta : banyak Shopee): spend Meta hanya
+  // boleh diproses sekali, komisi semua tag digabung (ROAS level Meta).
+  type Hub = (typeof filteredHubs)[number];
+  const metaGroups = new Map<
+    number,
+    { metaCampaign: Hub["metaCampaign"]; items: Hub["shopeeCampaign"]["orderItems"] }
+  >();
+  for (const hub of filteredHubs) {
+    let g = metaGroups.get(hub.metaCampaignId);
+    if (!g)
+      metaGroups.set(
+        hub.metaCampaignId,
+        (g = { metaCampaign: hub.metaCampaign, items: [] })
+      );
+    g.items.push(...hub.shopeeCampaign.orderItems);
+  }
+
   const acc = new Map<string, RegionAcc>();
   const getAcc = (region: string): RegionAcc => {
     let a = acc.get(region);
@@ -140,9 +157,8 @@ export async function GET(request: NextRequest) {
   // dengan total komisi dashboard.
   let komisiTanpaSpend = 0;
 
-  for (const hub of filteredHubs) {
-    const stats = hub.metaCampaign.dailyStats;
-    const items = hub.shopeeCampaign.orderItems;
+  for (const { metaCampaign, items } of metaGroups.values()) {
+    const stats = metaCampaign.dailyStats;
     if (stats.length === 0 && items.length === 0) continue;
 
     // Spend per (tanggal, wilayah) + agregat metrik Meta per wilayah
@@ -171,7 +187,7 @@ export async function GET(request: NextRequest) {
       a.metaClicks += d.uniqueLinkClicks;
       a.shopClicks += d.shopClicks;
       a.landingPageViews += d.landingPageViews;
-      if (d.spendIDR > 0) a.campaignIds.add(hub.metaCampaignId);
+      if (d.spendIDR > 0) a.campaignIds.add(metaCampaign.id);
     }
 
     // Agregat komisi & pesanan per tanggal klik (null = klik tanpa tanggal)

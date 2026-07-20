@@ -106,38 +106,82 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  // Opsi autocomplete filter kampanye/tag di UI — dari hub yang PUNYA data
+  // === Kelompokkan hub per kampanye Meta (1 Meta : banyak Shopee) ===
+  // ROAS di level Meta: satu baris per kampanye Meta, komisi/klik dari SEMUA
+  // tag Shopee yang tertaut digabung. dailyStats identik untuk tiap hub Meta
+  // yang sama (query menyertakan metaCampaign penuh) → ambil dari yang pertama.
+  type Hub = (typeof hubs)[number];
+  type MetaGroup = {
+    metaCampaign: Hub["metaCampaign"];
+    shopeeCampaigns: Hub["shopeeCampaign"][];
+  };
+  const groupMap = new Map<number, MetaGroup>();
+  for (const hub of hubs) {
+    let g = groupMap.get(hub.metaCampaignId);
+    if (!g)
+      groupMap.set(
+        hub.metaCampaignId,
+        (g = { metaCampaign: hub.metaCampaign, shopeeCampaigns: [] })
+      );
+    g.shopeeCampaigns.push(hub.shopeeCampaign);
+  }
+  const groups = [...groupMap.values()];
+
+  // Opsi autocomplete filter kampanye/tag di UI — dari grup yang PUNYA data
   // (spend/pesanan/klik) di rentang tanggal terpilih. Dihitung SEBELUM filter
   // akun/kampanye/tag diterapkan supaya list tetap lengkap saat salah satu
-  // filter tsb sedang aktif.
-  const activeHubs = hubs.filter(
-    (h) =>
-      h.metaCampaign.dailyStats.length > 0 ||
-      h.shopeeCampaign.orderItems.length > 0 ||
-      h.shopeeCampaign.clicks.length > 0
-  );
-  const campaignOptions = [...new Set(activeHubs.map((h) => h.metaCampaign.name))].sort(
-    (a, b) => a.localeCompare(b, "id-ID")
-  );
-  const tagOptions = [...new Set(activeHubs.map((h) => h.shopeeCampaign.name))].sort(
-    (a, b) => a.localeCompare(b, "id-ID")
-  );
+  // filter tsb sedang aktif. Tag = tiap nama Shopee yang aktif (grup punya
+  // spend, atau tag itu punya pesanan/klik).
+  const campaignOptions = [
+    ...new Set(
+      groups
+        .filter(
+          (g) =>
+            g.metaCampaign.dailyStats.length > 0 ||
+            g.shopeeCampaigns.some(
+              (s) => s.orderItems.length > 0 || s.clicks.length > 0
+            )
+        )
+        .map((g) => g.metaCampaign.name)
+    ),
+  ].sort((a, b) => a.localeCompare(b, "id-ID"));
+  const tagOptions = [
+    ...new Set(
+      groups.flatMap((g) => {
+        const metaActive = g.metaCampaign.dailyStats.length > 0;
+        return g.shopeeCampaigns
+          .filter(
+            (s) => metaActive || s.orderItems.length > 0 || s.clicks.length > 0
+          )
+          .map((s) => s.name);
+      })
+    ),
+  ].sort((a, b) => a.localeCompare(b, "id-ID"));
 
-  // Filter by account / campaign name / tag Shopee if specified
-  const filteredHubs = hubs.filter((hub) => {
-    if (metaAdAccountId && hub.metaCampaign.metaAdAccountId !== metaAdAccountId) return false;
-    if (shopeeAccountId && hub.shopeeCampaign.shopeeAccountId !== shopeeAccountId) return false;
-    if (campaignQuery && hub.metaCampaign.name.toLowerCase() !== campaignQuery) return false;
-    if (tagQuery && hub.shopeeCampaign.name.toLowerCase() !== tagQuery) return false;
-    if (deliveryFilter && hub.metaCampaign.status !== deliveryFilter) return false;
+  // Filter by account / campaign name / tag Shopee if specified. Filter sisi
+  // Shopee (akun/tag) meloloskan grup bila ADA satu tag yang cocok — komisi
+  // seluruh tag Meta itu tetap diagregasi (ROAS level Meta).
+  const filteredGroups = groups.filter((g) => {
+    if (metaAdAccountId && g.metaCampaign.metaAdAccountId !== metaAdAccountId) return false;
+    if (campaignQuery && g.metaCampaign.name.toLowerCase() !== campaignQuery) return false;
+    if (deliveryFilter && g.metaCampaign.status !== deliveryFilter) return false;
+    if (
+      shopeeAccountId &&
+      !g.shopeeCampaigns.some((s) => s.shopeeAccountId === shopeeAccountId)
+    )
+      return false;
+    if (tagQuery && !g.shopeeCampaigns.some((s) => s.name.toLowerCase() === tagQuery))
+      return false;
     return true;
   });
 
-  const rows = filteredHubs.map((hub) => {
-    const allStats = hub.metaCampaign.dailyStats;
+  const rows = filteredGroups.map((group) => {
+    const metaCampaign = group.metaCampaign;
+    const allStats = metaCampaign.dailyStats;
     const dailyStats = region ? allStats.filter((d) => d.region === region) : allStats;
-    const orderItems = hub.shopeeCampaign.orderItems;
-    const clicks = hub.shopeeCampaign.clicks;
+    // Gabung pesanan & klik dari semua tag Shopee milik Meta ini
+    const orderItems = group.shopeeCampaigns.flatMap((s) => s.orderItems);
+    const clicks = group.shopeeCampaigns.flatMap((s) => s.clicks);
 
     // Rasio prorata per tanggal: porsi spend wilayah terhadap spend total
     // kampanye ini. null = filter wilayah tidak aktif (rasio 1).
@@ -206,15 +250,18 @@ export async function GET(request: NextRequest) {
     );
 
     return {
-      metaCampaignId: hub.metaCampaign.id,
-      metaCampaignName: hub.metaCampaign.name,
+      metaCampaignId: metaCampaign.id,
+      metaCampaignName: metaCampaign.name,
       // "Penayangan kampanye" terkini (active/inactive/archived) — di-update
       // tiap import Meta
-      metaCampaignStatus: hub.metaCampaign.status,
-      metaAccountName: hub.metaCampaign.metaAdAccount.name,
-      shopeeCampaignId: hub.shopeeCampaign.id,
-      shopeeCampaignName: hub.shopeeCampaign.name,
-      shopeeAccountName: hub.shopeeCampaign.shopeeAccount.name,
+      metaCampaignStatus: metaCampaign.status,
+      metaAccountName: metaCampaign.metaAdAccount.name,
+      // Gabungan semua tag Shopee yang tertaut ke Meta ini (satu baris/Meta)
+      shopeeCampaignId: group.shopeeCampaigns[0].id,
+      shopeeCampaignName: group.shopeeCampaigns.map((s) => s.name).join(", "),
+      shopeeAccountName: [
+        ...new Set(group.shopeeCampaigns.map((s) => s.shopeeAccount.name)),
+      ].join(", "),
       spend: totalSpend,
       impressions: totalImpressions,
       metaClicks: totalUniqueClicks,
@@ -343,7 +390,7 @@ export async function GET(request: NextRequest) {
   if (!campaignQuery && !tagQuery && !shopeeAccountId) {
     const unlinkedMeta = await prisma.metaCampaign.findMany({
       where: {
-        hub: null,
+        hubs: { none: {} },
         ...(metaAdAccountId ? { metaAdAccountId } : {}),
         ...(deliveryFilter ? { status: deliveryFilter } : {}),
       },

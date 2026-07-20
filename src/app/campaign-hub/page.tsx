@@ -9,7 +9,8 @@ interface MetaCampaign {
   name: string;
   status: string;
   metaAdAccount: { id: number; name: string };
-  hub: { shopeeCampaign: { id: number; name: string } } | null;
+  // 1 Meta : banyak Shopee — daftar semua tag yang tertaut
+  hubs: { shopeeCampaign: { id: number; name: string } }[];
 }
 
 interface ShopeeCampaign {
@@ -346,15 +347,16 @@ export default function CampaignHubPage() {
     }
   };
 
-  const handleUnlink = async (metaId: number) => {
+  // Putus satu tag Shopee spesifik (1 Meta bisa punya banyak tag)
+  const handleUnlink = async (shopeeCampaignId: number) => {
     try {
       const res = await fetch("/api/campaign-hub", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "unlink", metaCampaignId: metaId }),
+        body: JSON.stringify({ action: "unlink", shopeeCampaignId }),
       });
       if (!res.ok) throw new Error("Gagal memutus");
-      showToast("Koneksi diputus");
+      showToast("Tag diputus");
       await fetchData();
     } catch (e) {
       showToast("Gagal memutus", String(e), "destructive");
@@ -371,11 +373,12 @@ export default function CampaignHubPage() {
 
   // Filter berdasarkan pencarian teks (Kampanye Meta & Tag Shopee)
   const filteredMetaCampaigns = metaCampaigns.filter((m) => {
-    if (showUnlinkedOnly && m.hub) return false;
+    if (showUnlinkedOnly && m.hubs.length > 0) return false;
     if (filterMeta && !m.name.toLowerCase().includes(filterMeta.toLowerCase())) return false;
     if (filterShopee) {
-      const shopeeName = m.hub?.shopeeCampaign.name || "";
-      if (!shopeeName.toLowerCase().includes(filterShopee.toLowerCase())) return false;
+      const q = filterShopee.toLowerCase();
+      if (!m.hubs.some((h) => h.shopeeCampaign.name.toLowerCase().includes(q)))
+        return false;
     }
     return true;
   });
@@ -417,7 +420,7 @@ export default function CampaignHubPage() {
           <div className="flex flex-wrap gap-3 items-end">
             <SearchSelect
               label="Kampanye Meta"
-              items={metaCampaigns.filter((m) => !m.hub)}
+              items={metaCampaigns}
               selectedId={selectedMetaId}
               onSelect={(id) => setSelectedMetaId(id)}
               displayFn={(m) => `${m.name} (${m.metaAdAccount.name})`}
@@ -548,15 +551,28 @@ export default function CampaignHubPage() {
                   </tr>
                 ) : (
                   filteredMetaCampaigns.map((mc) => {
-                    const shopeeName = mc.hub?.shopeeCampaign.name;
                     return (
                       <tr key={mc.id} className="border-b hover:bg-gray-50">
                         <td className="p-3 font-medium">{mc.name}</td>
                         <td className="p-3">
-                          {shopeeName ? (
-                            <span className="text-green-700 font-medium">
-                              {shopeeName}
-                            </span>
+                          {mc.hubs.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {mc.hubs.map((h) => (
+                                <span
+                                  key={h.shopeeCampaign.id}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded text-xs font-medium"
+                                >
+                                  {h.shopeeCampaign.name}
+                                  <button
+                                    onClick={() => handleUnlink(h.shopeeCampaign.id)}
+                                    className="text-green-500 hover:text-red-600 leading-none"
+                                    title="Putus tag ini"
+                                  >
+                                    ✕
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
@@ -568,14 +584,7 @@ export default function CampaignHubPage() {
                           <span className="text-xs">{mc.status}</span>
                         </td>
                         <td className="p-3">
-                          {mc.hub ? (
-                            <button
-                              onClick={() => handleUnlink(mc.id)}
-                              className="px-3 py-1 bg-red-50 text-red-700 rounded text-xs hover:bg-red-100"
-                            >
-                              Putus
-                            </button>
-                          ) : quickSelectMeta === mc.id ? (
+                          {quickSelectMeta === mc.id ? (
                             <QuickShopeeSearch
                               items={unlinkedShopee}
                               selectedId={selectedShopeeId}
@@ -604,7 +613,7 @@ export default function CampaignHubPage() {
                               }}
                               className="px-3 py-1 bg-blue-50 text-blue-700 rounded text-xs hover:bg-blue-100"
                             >
-                              Hubungkan
+                              {mc.hubs.length > 0 ? "＋ Tambah Tag" : "Hubungkan"}
                             </button>
                           )}
                         </td>

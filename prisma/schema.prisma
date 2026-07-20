@@ -45,18 +45,25 @@ model MetaCampaign {
   status          String @default("")
 
   metaAdAccount MetaAdAccount @relation(fields: [metaAdAccountId], references: [id])
-  hub           CampaignHub?
+  hubs          CampaignHub[]
   dailyStats    MetaAdDaily[]
 
   @@unique([metaAdAccountId, name])
 }
 
+// Tautan Meta ↔ Shopee. 1 Meta : banyak Shopee (satu kampanye Meta
+// mengiklankan beberapa link/tag produk). Tetap 1 Shopee : 1 Meta
+// (shopeeCampaignId @unique) agar komisi tidak terhitung ganda.
+// ROAS dihitung di level kampanye Meta (komisi semua tag digabung).
 model CampaignHub {
-  metaCampaignId  Int  @id
+  id               Int @id @default(autoincrement())
+  metaCampaignId   Int
   shopeeCampaignId Int @unique
 
   metaCampaign   MetaCampaign   @relation(fields: [metaCampaignId], references: [id])
   shopeeCampaign ShopeeCampaign @relation(fields: [shopeeCampaignId], references: [id])
+
+  @@index([metaCampaignId])
 }
 
 model MetaAdDaily {
