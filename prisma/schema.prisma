@@ -44,9 +44,10 @@ model MetaCampaign {
   name            String
   status          String @default("")
 
-  metaAdAccount MetaAdAccount @relation(fields: [metaAdAccountId], references: [id])
-  hubs          CampaignHub[]
-  dailyStats    MetaAdDaily[]
+  metaAdAccount   MetaAdAccount @relation(fields: [metaAdAccountId], references: [id])
+  hubs            CampaignHub[]
+  dailyStats      MetaAdDaily[]
+  placementStats  MetaAdPlacement[]
 
   @@unique([metaAdAccountId, name])
 }
@@ -100,6 +101,45 @@ model MetaAdDaily {
   // Baris lama hasil agregasi punya region = "" dan dihapus otomatis saat
   // (kampanye, tanggal) yang sama diimpor ulang dengan detail per-wilayah.
   @@unique([metaCampaignId, date, region])
+}
+
+// Metrik Meta dipecah per-Penempatan (dari ekspor "Perincian: Penempatan").
+// Tabel TERPISAH dari MetaAdDaily: file (Wilayah) & (Penempatan) adalah dua
+// breakdown marginal dari angka induk (kampanye, tanggal) yang sama — spend
+// totalnya identik, jadi TIDAK boleh disatukan (akan dobel). Metrik iklan saja,
+// tanpa komisi (komisi Shopee tak punya dimensi penempatan). Membacanya:
+// terapkan PPN 11% via spendWithPpn() saat agregasi, sama seperti MetaAdDaily.
+model MetaAdPlacement {
+  id               Int      @id @default(autoincrement())
+  metaCampaignId   Int
+  date             DateTime
+  platform         String   @default("") // "Platform": Facebook / Instagram
+  placement        String   @default("") // "Penempatan": Facebook Reels / Kabar / ...
+  devicePlatform   String   @default("") // "Platform Perangkat": Di aplikasi / Web Seluler
+  spendIDR         Float    @default(0)
+  impressions      Int      @default(0)
+  reach            Int      @default(0)
+  frequency        Float    @default(0)
+  uniqueLinkClicks Int      @default(0)
+  results          Int      @default(0)
+  resultIndicator  String   @default("")
+  costPerResult    Float    @default(0)
+  delivery         String   @default("")
+  shopClicks       Int      @default(0)
+  cpc              Float    @default(0)
+  ctr              Float    @default(0)
+  allClicks        Int      @default(0)
+  allCtr           Float    @default(0)
+  allCpc           Float    @default(0)
+  landingPageViews Int      @default(0)
+  costPerLpv       Float    @default(0)
+  cpm              Float    @default(0)
+
+  lastImportId     Int?
+
+  metaCampaign MetaCampaign @relation(fields: [metaCampaignId], references: [id])
+
+  @@unique([metaCampaignId, date, platform, placement, devicePlatform])
 }
 
 model ShopeeOrderItem {

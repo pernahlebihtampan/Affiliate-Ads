@@ -1,9 +1,24 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Fragment, useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { DailyChart } from "@/components/daily-chart";
 import { defaultDateRange, formatCurrency, formatNumber } from "@/lib/utils";
+
+// Rincian sisi Shopee per tag (untuk baris expand di bawah baris kampanye
+// Meta). Spend & klik Meta ada di level Meta, tidak dirinci per tag.
+interface TagRow {
+  shopeeCampaignId: number;
+  shopeeCampaignName: string;
+  shopeeAccountName: string;
+  shopeeClicks: number;
+  orders: number;
+  items: number;
+  nilaiPembelian: number;
+  komisiTertunda: number;
+  komisiSelesai: number;
+  totalKomisi: number;
+}
 
 interface DashboardRow {
   // null = kampanye Shopee bertag yang belum ditautkan di Campaign Hub
@@ -29,6 +44,9 @@ interface DashboardRow {
   cpc: number;
   epc: number;
   cr: number;
+  // Rincian per tag Shopee yang tertaut ke kampanye Meta ini (1 Meta : banyak
+  // Shopee). Baris belum-tertaut = [] (sudah per-tag).
+  tags: TagRow[];
 }
 
 interface Totals {
@@ -129,6 +147,16 @@ export default function DashboardPage() {
   // Sortir tabel (klik header). null = urutan asli dari API.
   const [sortKey, setSortKey] = useState<keyof DashboardRow | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  // Baris kampanye Meta yang sedang di-expand (per metaCampaignId) — memperlihatkan
+  // rincian sisi Shopee per tag.
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const toggleExpand = (id: number) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -571,9 +599,18 @@ export default function DashboardPage() {
                     </td>
                   </tr>
                 ) : (
-                  sortedRows.map((row) => (
-                    <tr
+                  sortedRows.map((row) => {
+                    // Bisa di-expand hanya bila kampanye Meta menautkan >1 tag
+                    // Shopee (rincian per tag). 1 tag = baris utama sudah cukup.
+                    const canExpand =
+                      row.metaCampaignId !== null && row.tags.length > 1;
+                    const isExpanded =
+                      row.metaCampaignId !== null && expanded.has(row.metaCampaignId);
+                    return (
+                    <Fragment
                       key={row.metaCampaignId ?? `unlinked-${row.shopeeCampaignId}`}
+                    >
+                    <tr
                       className={`border-b hover:bg-gray-50 ${
                         row.metaCampaignId === null ? "bg-amber-50/50" : ""
                       }`}
@@ -607,7 +644,24 @@ export default function DashboardPage() {
                         {row.metaCampaignId === null ? "—" : row.metaAccountName}
                       </td>
                       <td className="p-3 text-muted-foreground">
-                        {row.shopeeCampaignName}
+                        {canExpand ? (
+                          <button
+                            onClick={() => toggleExpand(row.metaCampaignId!)}
+                            className="flex items-center gap-1.5 text-left hover:text-foreground"
+                            title={
+                              isExpanded
+                                ? "Sembunyikan rincian per tag"
+                                : `Lihat rincian ${row.tags.length} tag Shopee`
+                            }
+                          >
+                            <span className="inline-block w-3 text-xs transition-transform">
+                              {isExpanded ? "▾" : "▸"}
+                            </span>
+                            <span>{row.shopeeCampaignName}</span>
+                          </button>
+                        ) : (
+                          row.shopeeCampaignName
+                        )}
                       </td>
                       <td className="p-3 text-right">
                         {formatCurrency(row.spend)}
@@ -647,7 +701,43 @@ export default function DashboardPage() {
                         )}
                       </td>
                     </tr>
-                  ))
+                    {/* Sub-baris rincian per tag Shopee. Spend/klik Meta & ROAS
+                        di level Meta → tidak dirinci per tag (tampil —). */}
+                    {isExpanded &&
+                      row.tags.map((tag) => (
+                        <tr
+                          key={tag.shopeeCampaignId}
+                          className="border-b bg-gray-50/60 text-muted-foreground"
+                        >
+                          <td className="p-2"></td>
+                          <td className="p-2"></td>
+                          <td className="p-2 text-xs">{tag.shopeeAccountName}</td>
+                          <td className="p-2 pl-8 text-xs">↳ {tag.shopeeCampaignName}</td>
+                          <td className="p-2 text-right text-xs">—</td>
+                          <td className="p-2 text-right text-xs">—</td>
+                          <td className="p-2 text-right text-xs">
+                            {formatNumber(tag.shopeeClicks)}
+                          </td>
+                          <td className="p-2 text-right text-xs">
+                            {formatNumber(tag.orders)}
+                          </td>
+                          <td className="p-2 text-right text-xs">
+                            <div>
+                              {regionFilter && "±"}
+                              {formatCurrency(tag.totalKomisi)}
+                            </div>
+                            {tag.komisiTertunda > 0 && (
+                              <div className="text-[11px]">
+                                🕐{formatCurrency(tag.komisiTertunda)}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-2 text-right text-xs">—</td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                    );
+                  })
                 )}
               </tbody>
               {totals && rows.length > 0 && (

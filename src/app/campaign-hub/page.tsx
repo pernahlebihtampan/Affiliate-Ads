@@ -252,7 +252,9 @@ export default function CampaignHubPage() {
   const [shopeeCampaigns, setShopeeCampaigns] = useState<ShopeeCampaign[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showUnlinkedOnly, setShowUnlinkedOnly] = useState(true);
+  const [linkFilter, setLinkFilter] = useState<"all" | "linked" | "unlinked">(
+    "unlinked",
+  );
   const [selectedMetaId, setSelectedMetaId] = useState<number | null>(null);
   const [selectedShopeeId, setSelectedShopeeId] = useState<number | null>(null);
   const [linkingId, setLinkingId] = useState<number | null>(null);
@@ -373,7 +375,8 @@ export default function CampaignHubPage() {
 
   // Filter berdasarkan pencarian teks (Kampanye Meta & Tag Shopee)
   const filteredMetaCampaigns = metaCampaigns.filter((m) => {
-    if (showUnlinkedOnly && m.hubs.length > 0) return false;
+    if (linkFilter === "unlinked" && m.hubs.length > 0) return false;
+    if (linkFilter === "linked" && m.hubs.length === 0) return false;
     if (filterMeta && !m.name.toLowerCase().includes(filterMeta.toLowerCase())) return false;
     if (filterShopee) {
       const q = filterShopee.toLowerCase();
@@ -483,15 +486,27 @@ export default function CampaignHubPage() {
 
         {/* Filter & Toggle */}
         <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={showUnlinkedOnly}
-              onChange={(e) => setShowUnlinkedOnly(e.target.checked)}
-              className="rounded"
-            />
-            Hanya tampilkan yang belum terhubung
-          </label>
+          <div className="flex items-center gap-1 text-sm">
+            {(
+              [
+                { value: "all", label: "Semua" },
+                { value: "linked", label: "Terhubung" },
+                { value: "unlinked", label: "Belum terhubung" },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setLinkFilter(opt.value)}
+                className={`px-3 py-1.5 rounded-md border text-sm ${
+                  linkFilter === opt.value
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-white hover:bg-gray-50"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           <div className="flex-1" />
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -544,9 +559,11 @@ export default function CampaignHubPage() {
                 ) : filteredMetaCampaigns.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="p-6 text-center text-muted-foreground">
-                      {showUnlinkedOnly
+                      {linkFilter === "unlinked"
                         ? "Semua kampanye sudah terhubung!"
-                        : "Belum ada kampanye Meta. Import CSV terlebih dahulu."}
+                        : linkFilter === "linked"
+                          ? "Belum ada kampanye yang terhubung."
+                          : "Belum ada kampanye Meta. Import CSV terlebih dahulu."}
                     </td>
                   </tr>
                 ) : (

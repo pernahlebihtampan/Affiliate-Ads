@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseMetaAdCsv, parseShopeeClickCsv, parseShopeeCommissionCsv } from "@/lib/csv-parser";
+import { parseMetaAdCsv, parseMetaAdPlacementCsv, parseShopeeClickCsv, parseShopeeCommissionCsv } from "@/lib/csv-parser";
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,6 +17,9 @@ export async function POST(request: NextRequest) {
     switch (type) {
       case "meta":
         result = parseMetaAdCsv(content);
+        break;
+      case "meta_placement":
+        result = parseMetaAdPlacementCsv(content);
         break;
       case "shopee_click":
         result = parseShopeeClickCsv(content);

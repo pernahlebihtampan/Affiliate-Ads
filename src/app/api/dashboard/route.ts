@@ -249,6 +249,42 @@ export async function GET(request: NextRequest) {
       clicks.reduce((s, c) => s + ratioFor(c.clickTimeUTC), 0)
     );
 
+    // Rincian per tag Shopee (untuk baris expand di dashboard). Spend/klik Meta
+    // ada di level Meta → tidak dibagi per tag; hanya metrik sisi Shopee yang
+    // dirinci. Prorata wilayah ikut diterapkan sama seperti agregat di atas.
+    const tags = group.shopeeCampaigns.map((s) => {
+      const items = s.orderItems;
+      const tagOrderClickTime = new Map<string, Date | null>();
+      for (const o of items) {
+        if (!tagOrderClickTime.has(o.idPemesanan))
+          tagOrderClickTime.set(o.idPemesanan, o.clickTimeUTC);
+      }
+      const tagKomisiTertunda = items
+        .filter((o) => o.statusPesanan === "Tertunda")
+        .reduce((sum, o) => sum + o.komisiBersihRp * ratioFor(o.clickTimeUTC), 0);
+      const tagKomisiSelesai = items
+        .filter((o) => o.statusPesanan === "Selesai")
+        .reduce((sum, o) => sum + o.komisiBersihRp * ratioFor(o.clickTimeUTC), 0);
+      return {
+        shopeeCampaignId: s.id,
+        shopeeCampaignName: s.name,
+        shopeeAccountName: s.shopeeAccount.name,
+        shopeeClicks: Math.round(
+          s.clicks.reduce((sum, c) => sum + ratioFor(c.clickTimeUTC), 0)
+        ),
+        orders: Math.round(
+          [...tagOrderClickTime.values()].reduce((sum, t) => sum + ratioFor(t), 0)
+        ),
+        items: Math.round(items.reduce((sum, o) => sum + ratioFor(o.clickTimeUTC), 0)),
+        nilaiPembelian: items.reduce(
+          (sum, o) => sum + o.nilaiPembelianRp * ratioFor(o.clickTimeUTC), 0
+        ),
+        komisiTertunda: tagKomisiTertunda,
+        komisiSelesai: tagKomisiSelesai,
+        totalKomisi: tagKomisiTertunda + tagKomisiSelesai,
+      };
+    });
+
     return {
       metaCampaignId: metaCampaign.id,
       metaCampaignName: metaCampaign.name,
@@ -276,6 +312,7 @@ export async function GET(request: NextRequest) {
       cpc: totalUniqueClicks > 0 ? totalSpend / totalUniqueClicks : 0,
       epc: shopeeClicks > 0 ? totalKomisi / shopeeClicks : 0,
       cr: shopeeClicks > 0 ? totalOrders / shopeeClicks : 0,
+      tags,
     };
   });
 
@@ -342,6 +379,7 @@ export async function GET(request: NextRequest) {
         cpc: 0,
         epc: shopeeClicks > 0 ? totalKomisi / shopeeClicks : 0,
         cr: shopeeClicks > 0 ? totalOrders / shopeeClicks : 0,
+        tags: [] as (typeof rows)[number]["tags"],
       };
     })
     // Hanya yang punya data di rentang terpilih — tag mati tidak memenuhi tabel

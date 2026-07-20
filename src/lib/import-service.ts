@@ -1,7 +1,12 @@
 import { prisma } from "./prisma";
 import { computeFileHash, parseTagRaw, parseDateWib } from "./utils";
 import { beginImportRows, updateImportProgress } from "./import-progress";
-import type { MetaAdRow, ShopeeClickRow, ShopeeCommissionRow } from "./csv-parser";
+import type {
+  MetaAdRow,
+  MetaAdPlacementRow,
+  ShopeeClickRow,
+  ShopeeCommissionRow,
+} from "./csv-parser";
 
 const BATCH_SIZE = 500;
 const PROGRESS_EVERY = 100;
@@ -192,6 +197,111 @@ export async function importMetaAdCsv(
     }
 
     rows[i] = null as never; // lepaskan baris terproses agar bisa di-GC (file besar)
+    if ((i + 1) % YIELD_EVERY === 0) {
+      await yieldEventLoop();
+    }
+    if ((i + 1) % PROGRESS_EVERY === 0) {
+      updateImportProgress(i + 1, result);
+    }
+    if ((i + 1) % BATCH_SIZE === 0) {
+      await saveProgress(importBatch.id, result);
+    }
+  }
+
+  await saveProgress(importBatch.id, result);
+  return result;
+}
+
+// ========== META ADS — IMPOR PENEMPATAN ==========
+// Tabel MetaAdPlacement terpisah dari MetaAdDaily. Kampanye Meta dipakai
+// bersama (get-or-create by name — TIDAK memperbarui status; status per-
+// penempatan campuran active/inactive, biarkan impor Meta/wilayah yang
+// berwenang). type "meta_placement" → dedup & staleness terpisah dari "meta".
+export async function importMetaAdPlacementCsv(
+  metaAdAccountId: number,
+  fileName: string,
+  rows: MetaAdPlacementRow[],
+  fileMeta?: ImportFileMeta
+): Promise<ImportResult> {
+  const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: [] };
+  const fileHash = computeFileHash(JSON.stringify(rows));
+
+  const existing = await prisma.importBatch.findUnique({ where: { fileHash } });
+  if (existing) {
+    result.skipped = rows.length;
+    result.errors.push(`File "${fileName}" sudah pernah diimpor sebelumnya.`);
+    return result;
+  }
+
+  const staleError = await checkFileIsNewer("meta_placement", metaAdAccountId, fileName, fileMeta);
+  if (staleError) {
+    result.skipped = rows.length;
+    result.errors.push(staleError);
+    return result;
+  }
+
+  const importBatch = await prisma.importBatch.create({
+    data: {
+      type: "meta_placement", accountId: metaAdAccountId, accountType: "meta",
+      fileName, fileHash, ...fileMetaData(fileMeta),
+    },
+  });
+
+  beginImportRows(rows.length);
+
+  // Pre-fetch existing campaigns for cache (dipakai bersama tabel MetaAdDaily)
+  const existingCampaigns = await prisma.metaCampaign.findMany({ where: { metaAdAccountId } });
+  const campaignMap = new Map(existingCampaigns.map(c => [c.name, c]));
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const startDate = parseDateWib(row.startDate);
+    if (!startDate) {
+      result.skipped++;
+      result.errors.push(
+        `Baris "${row.campaignName}" dilewati: tanggal "${row.startDate}" tidak terparse.`
+      );
+      continue;
+    }
+
+    let campaign = campaignMap.get(row.campaignName);
+    if (!campaign) {
+      campaign = await prisma.metaCampaign.create({
+        data: { metaAdAccountId, name: row.campaignName, status: row.delivery },
+      });
+      campaignMap.set(row.campaignName, campaign);
+    }
+
+    const existingRow = await prisma.metaAdPlacement.findUnique({
+      where: {
+        metaCampaignId_date_platform_placement_devicePlatform: {
+          metaCampaignId: campaign.id, date: startDate,
+          platform: row.platform, placement: row.placement, devicePlatform: row.devicePlatform,
+        },
+      },
+    });
+
+    const placementData = {
+      platform: row.platform, placement: row.placement, devicePlatform: row.devicePlatform,
+      spendIDR: row.spend, impressions: row.impressions, reach: row.reach,
+      frequency: row.frequency, uniqueLinkClicks: row.uniqueLinkClicks,
+      results: row.results, resultIndicator: row.resultIndicator,
+      costPerResult: row.costPerResult, delivery: row.delivery,
+      shopClicks: row.shopClicks, cpc: row.cpc, ctr: row.ctr,
+      allClicks: row.allClicks, allCtr: row.allCtr, allCpc: row.allCpc,
+      landingPageViews: row.landingPageViews, costPerLpv: row.costPerLpv, cpm: row.cpm,
+      lastImportId: importBatch.id,
+    };
+
+    if (existingRow) {
+      await prisma.metaAdPlacement.update({ where: { id: existingRow.id }, data: placementData });
+      result.updated++;
+    } else {
+      await prisma.metaAdPlacement.create({ data: { metaCampaignId: campaign.id, date: startDate, ...placementData } });
+      result.inserted++;
+    }
+
+    rows[i] = null as never;
     if ((i + 1) % YIELD_EVERY === 0) {
       await yieldEventLoop();
     }

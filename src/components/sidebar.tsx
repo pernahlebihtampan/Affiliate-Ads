@@ -6,8 +6,9 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", label: "Dasbor", icon: "📊" },
-  { href: "/wilayah", label: "Performa Wilayah", icon: "🗺️" },
   { href: "/klik", label: "Performa Klik", icon: "🖱️" },
+  { href: "/wilayah", label: "Performa Wilayah", icon: "🗺️" },
+  { href: "/penempatan", label: "Performa Penempatan", icon: "🎯" },
   { href: "/import", label: "Import CSV", icon: "📥" },
   { href: "/campaign-hub", label: "Pusat Kampanye", icon: "🔗" },
   { href: "/akun", label: "Akun", icon: "👤" },

@@ -137,6 +137,145 @@ export function parseMetaAdCsv(content: string): { rows: MetaAdRow[]; errors: st
   return { rows, errors };
 }
 
+// ========== META ADS — PERINCIAN PENEMPATAN ==========
+// Ekspor Meta dengan "Perincian: Penempatan". Sama seperti CSV wilayah TAPI
+// kolom Wilayah diganti tiga dimensi penempatan (Platform / Penempatan /
+// Platform Perangkat). Grain MetaAdPlacement = (kampanye, tanggal, platform,
+// penempatan, platform-perangkat). Metrik & varian header identik parseMetaAdCsv.
+export interface MetaAdPlacementRow {
+  campaignName: string;
+  delivery: string;
+  platform: string;
+  placement: string;
+  devicePlatform: string;
+  results: number;
+  resultIndicator: string;
+  costPerResult: number;
+  spend: number;
+  impressions: number;
+  reach: number;
+  frequency: number;
+  uniqueLinkClicks: number;
+  startDate: string;
+  endDate: string;
+  shopClicks: number;
+  cpc: number;
+  ctr: number;
+  allClicks: number;
+  allCtr: number;
+  allCpc: number;
+  landingPageViews: number;
+  costPerLpv: number;
+  cpm: number;
+}
+
+export function parseMetaAdPlacementCsv(content: string): {
+  rows: MetaAdPlacementRow[];
+  errors: string[];
+} {
+  const result = Papa.parse(content, { header: true, skipEmptyLines: true });
+  const errors: string[] = [];
+
+  // Guard salah-tipe: bila tak satu pun kolom penempatan ada, ini bukan CSV
+  // Penempatan (kemungkinan file Wilayah salah dipilih) — tolak agar tak
+  // menghasilkan baris kosong yang salah-atribusi.
+  const headers = (result.meta.fields ?? []) as string[];
+  const hasPlacementDim = ["Platform", "Penempatan", "Platform Perangkat"].some(
+    (h) => headers.includes(h)
+  );
+  if (!hasPlacementDim) {
+    return {
+      rows: [],
+      errors: [
+        'Kolom Platform/Penempatan/Platform Perangkat tidak ditemukan. Pastikan ini CSV Meta dengan "Perincian: Penempatan", bukan file Wilayah.',
+      ],
+    };
+  }
+
+  const agg = new Map<string, MetaAdPlacementRow>();
+
+  for (let i = 0; i < result.data.length; i++) {
+    const raw = result.data[i] as Record<string, string>;
+    if (!raw["Nama kampanye"]) {
+      errors.push(`Baris ${i + 2}: Nama kampanye kosong, dilewati`);
+      continue;
+    }
+
+    const name = raw["Nama kampanye"] || "";
+    const startDate = raw["Awal pelaporan"] || "";
+    const platform = raw["Platform"] || "";
+    const placement = raw["Penempatan"] || "";
+    const devicePlatform = raw["Platform Perangkat"] || "";
+    const key = `${name}|${startDate}|${platform}|${placement}|${devicePlatform}`;
+
+    // Old: "Klik Tautan Unik"  New: "Klik tautan"
+    const uniqueLinkClicksRaw = raw["Klik tautan"] || raw["Klik Tautan Unik"] || "0";
+
+    const spend = parseFloatSafe(raw["Jumlah yang dibelanjakan (IDR)"]);
+    const impressions = parseIntSafe(raw["Impresi"]);
+    const reach = parseIntSafe(raw["Jangkauan"]);
+    const uniqueLinkClicks = parseIntSafe(uniqueLinkClicksRaw);
+    const results = parseIntSafe(raw["Hasil"]);
+    const shopClicks = parseIntSafe(raw["shop_clicks"]);
+    const allClicks = parseIntSafe(raw["Klik (semua)"]);
+    const landingPageViews = parseIntSafe(raw["Tayangan halaman tujuan"]);
+
+    const existing = agg.get(key);
+    if (existing) {
+      existing.spend += spend;
+      existing.impressions += impressions;
+      existing.reach += reach;
+      existing.uniqueLinkClicks += uniqueLinkClicks;
+      existing.results += results;
+      existing.shopClicks += shopClicks;
+      existing.allClicks += allClicks;
+      existing.landingPageViews += landingPageViews;
+    } else {
+      agg.set(key, {
+        campaignName: name,
+        delivery: raw["Penayangan kampanye"] || "",
+        platform,
+        placement,
+        devicePlatform,
+        results,
+        resultIndicator: raw["Indikator Hasil"] || "",
+        costPerResult: 0,
+        spend,
+        impressions,
+        reach,
+        frequency: 0,
+        uniqueLinkClicks,
+        startDate,
+        endDate: raw["Akhir pelaporan"] || "",
+        shopClicks,
+        cpc: 0,
+        ctr: 0,
+        allClicks,
+        allCtr: 0,
+        allCpc: 0,
+        landingPageViews,
+        costPerLpv: 0,
+        cpm: 0,
+      });
+    }
+  }
+
+  const rows: MetaAdPlacementRow[] = [];
+  for (const r of agg.values()) {
+    r.frequency = r.reach > 0 ? r.impressions / r.reach : 0;
+    r.cpc = r.uniqueLinkClicks > 0 ? r.spend / r.uniqueLinkClicks : 0;
+    r.ctr = r.impressions > 0 ? r.uniqueLinkClicks / r.impressions : 0;
+    r.allCpc = r.allClicks > 0 ? r.spend / r.allClicks : 0;
+    r.allCtr = r.impressions > 0 ? r.allClicks / r.impressions : 0;
+    r.cpm = r.impressions > 0 ? (r.spend / r.impressions) * 1000 : 0;
+    r.costPerResult = r.results > 0 ? r.spend / r.results : 0;
+    r.costPerLpv = r.landingPageViews > 0 ? r.spend / r.landingPageViews : 0;
+    rows.push(r);
+  }
+
+  return { rows, errors };
+}
+
 // ========== SHOPEE WEBSITE CLICK REPORT ==========
 export interface ShopeeClickRow {
   klikId: string;

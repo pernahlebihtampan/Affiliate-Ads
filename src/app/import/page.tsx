@@ -4,12 +4,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { showToast } from "@/components/toast-container";
 import { formatCurrency, formatNumber } from "@/lib/utils";
-import type { MetaAdRow, ShopeeClickRow, ShopeeCommissionRow } from "@/lib/csv-parser";
+import type { MetaAdRow, MetaAdPlacementRow, ShopeeClickRow, ShopeeCommissionRow } from "@/lib/csv-parser";
 
-type ImportType = "meta" | "shopee_click" | "shopee_commission";
+type ImportType = "meta" | "meta_placement" | "shopee_click" | "shopee_commission";
 
-// Baris preview bisa berasal dari salah satu dari tiga parser, gabungkan sebagai Partial.
-type PreviewRow = Partial<MetaAdRow & ShopeeClickRow & ShopeeCommissionRow>;
+// Baris preview bisa berasal dari salah satu parser, gabungkan sebagai Partial.
+type PreviewRow = Partial<MetaAdRow & MetaAdPlacementRow & ShopeeClickRow & ShopeeCommissionRow>;
 
 interface ImportResultResponse {
   inserted: number;
@@ -36,7 +36,8 @@ interface ImportProgress {
 }
 
 const typeLabels: Record<ImportType, string> = {
-  meta: "Meta Ads Campaign Report",
+  meta: "Meta Ads — Wilayah",
+  meta_placement: "Meta Ads — Penempatan",
   shopee_click: "Shopee Website Click Report",
   shopee_commission: "Shopee Affiliate Commission Report",
 };
@@ -102,7 +103,7 @@ export default function ImportPage() {
   }, []);
 
   const getAccountsForType = () => {
-    if (importType === "meta") return accounts.meta;
+    if (importType === "meta" || importType === "meta_placement") return accounts.meta;
     return accounts.shopee;
   };
 
@@ -200,6 +201,7 @@ export default function ImportPage() {
 
       const endpointMap: Record<ImportType, string> = {
         meta: "/api/import/meta",
+        meta_placement: "/api/import/placement",
         shopee_click: "/api/import/click",
         shopee_commission: "/api/import/commission",
       };
@@ -252,6 +254,7 @@ export default function ImportPage() {
 
   const typeColumns: Record<ImportType, string[]> = {
     meta: ["Nama kampanye", "Spend", "Impresi", "Klik", "Jangkauan"],
+    meta_placement: ["Nama kampanye", "Platform", "Penempatan", "Perangkat", "Spend", "Klik"],
     shopee_click: ["Klik ID", "Waktu", "Wilayah", "Tag", "Perujuk"],
     shopee_commission: ["ID Pesanan", "Status", "Produk", "Komisi", "Tag1"],
   };
@@ -271,6 +274,12 @@ export default function ImportPage() {
     switch (col) {
       case "Nama kampanye":
         return row.campaignName;
+      case "Platform":
+        return row.platform;
+      case "Penempatan":
+        return row.placement;
+      case "Perangkat":
+        return row.devicePlatform;
       case "Spend":
         return row.spend ? formatCurrency(row.spend) : "0";
       case "Impresi":
@@ -318,7 +327,7 @@ export default function ImportPage() {
         <div className="bg-white rounded-lg border p-4 space-y-4">
           <h2 className="font-medium">1. Pilih tipe laporan</h2>
           <div className="flex flex-wrap gap-2">
-            {(["meta", "shopee_click", "shopee_commission"] as ImportType[]).map(
+            {(["meta", "meta_placement", "shopee_click", "shopee_commission"] as ImportType[]).map(
               (type) => (
                 <button
                   key={type}
