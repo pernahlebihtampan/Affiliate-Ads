@@ -193,7 +193,7 @@ export async function importMetaAdCsv(
       await prisma.metaAdDaily.update({ where: { id: existingDaily.id }, data: dailyData });
       result.updated++;
     } else {
-      await prisma.metaAdDaily.create({ data: { metaCampaignId: campaign.id, date: startDate, ...dailyData } });
+      await prisma.metaAdDaily.create({ data: { metaCampaignId: campaign.id, date: startDate, ...dailyData, firstImportId: importBatch.id } });
       result.inserted++;
     }
 
@@ -299,7 +299,7 @@ export async function importMetaAdPlacementCsv(
       await prisma.metaAdPlacement.update({ where: { id: existingRow.id }, data: placementData });
       result.updated++;
     } else {
-      await prisma.metaAdPlacement.create({ data: { metaCampaignId: campaign.id, date: startDate, ...placementData } });
+      await prisma.metaAdPlacement.create({ data: { metaCampaignId: campaign.id, date: startDate, ...placementData, firstImportId: importBatch.id } });
       result.inserted++;
     }
 
@@ -394,6 +394,7 @@ export async function importShopeeClickCsv(
           clickTimeUTC: clickTime,
           wilayah: row.wilayah, tagRaw: row.tagRaw, tag1, tag2,
           shopeeCampaignId: campaignId, perujuk: row.perujuk,
+          firstImportId: importBatch.id,
           lastImportId: importBatch.id,
         },
       });
@@ -530,7 +531,7 @@ export async function importShopeeCommissionCsv(
       await prisma.shopeeOrderItem.update({ where: { idPemesanan_idBarang_idModel_idPromosi: pk }, data });
       result.updated++;
     } else {
-      await prisma.shopeeOrderItem.create({ data: { ...pk, ...data } });
+      await prisma.shopeeOrderItem.create({ data: { ...pk, ...data, firstImportId: importBatch.id } });
       result.inserted++;
     }
 

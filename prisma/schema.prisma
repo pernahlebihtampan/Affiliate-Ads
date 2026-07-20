@@ -93,6 +93,10 @@ model MetaAdDaily {
   costPerLpv       Float    @default(0)
   cpm              Float    @default(0)
 
+  // Batch yang pertama kali MEMBUAT baris ini — tidak pernah ditimpa saat
+  // update. Dipakai fitur hapus riwayat impor: hanya baris yang lahir dari
+  // batch terkini yang dihapus (baris lama yang cuma di-update dipertahankan).
+  firstImportId    Int?
   lastImportId     Int?
 
   metaCampaign MetaCampaign @relation(fields: [metaCampaignId], references: [id])
@@ -135,6 +139,7 @@ model MetaAdPlacement {
   costPerLpv       Float    @default(0)
   cpm              Float    @default(0)
 
+  firstImportId    Int?
   lastImportId     Int?
 
   metaCampaign MetaCampaign @relation(fields: [metaCampaignId], references: [id])
@@ -200,6 +205,7 @@ model ShopeeOrderItem {
   clickTimeUTC       DateTime?
   orderTimeUTC       DateTime?
   completeTimeUTC    DateTime?
+  firstImportId      Int?
   lastImportId       Int?
 
   shopeeAccount  ShopeeAccount?  @relation(fields: [shopeeAccountId], references: [id])
@@ -219,6 +225,7 @@ model ShopeeClick {
   tag2            String  @default("")
   shopeeCampaignId Int?
   perujuk         String  @default("")
+  firstImportId   Int?
   lastImportId    Int?
 
   shopeeAccount  ShopeeAccount  @relation(fields: [shopeeAccountId], references: [id])
