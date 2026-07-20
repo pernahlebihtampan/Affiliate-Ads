@@ -14,7 +14,6 @@ const navItems = [
   { href: "/import", label: "Import CSV", icon: "📥" },
   { href: "/campaign-hub", label: "Pusat Kampanye", icon: "🔗" },
   { href: "/riwayat-impor", label: "Riwayat Impor", icon: "📋" },
-  { href: "/data", label: "Data Browser", icon: "🔍" },
   { href: "/settings", label: "Pengaturan", icon: "⚙️" },
 ];
 
