@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", label: "Dasbor", icon: "📊" },
+  { href: "/ringkasan", label: "Ringkasan", icon: "📈" },
   { href: "/klik", label: "Performa Klik", icon: "🖱️" },
   { href: "/wilayah", label: "Performa Wilayah", icon: "🗺️" },
   { href: "/penempatan", label: "Performa Penempatan", icon: "🎯" },

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseShopeeCommissionCsv } from "@/lib/csv-parser";
 import { importShopeeCommissionCsv } from "@/lib/import-service";
+import { parseDateWib } from "@/lib/utils";
+import { computeAndStoreDailySnapshot } from "@/lib/daily-snapshot";
 import {
   startImportProgress,
   finishImportProgress,
@@ -34,6 +36,9 @@ export async function POST(request: NextRequest) {
       lastModified: lastModifiedRaw ? parseInt(lastModifiedRaw as string) : undefined,
       size: fileSizeRaw ? parseInt(fileSizeRaw as string) : undefined,
     };
+    // Tanggal laporan dari Dasbor Harian (opsional; halaman /import lama tidak mengirimnya)
+    const reportDateRaw = formData.get("reportDate");
+    const reportDate = reportDateRaw ? parseDateWib(reportDateRaw as string) ?? undefined : undefined;
 
     startImportProgress("shopee_commission", file.name);
     // Parse inline agar string CSV mentah tidak tertahan di scope selama impor
@@ -43,7 +48,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No valid rows found", parseErrors }, { status: 400 });
     }
 
-    const result = await importShopeeCommissionCsv(shopeeAccountId, file.name, rows, fileMeta);
+    const result = await importShopeeCommissionCsv(shopeeAccountId, file.name, rows, fileMeta, reportDate);
+
+    // Bekukan ulang snapshot laporan harian untuk tanggal ini setelah impor
+    if (reportDate) await computeAndStoreDailySnapshot(reportDate);
 
     return NextResponse.json({
       ...result,

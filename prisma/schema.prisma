@@ -237,10 +237,28 @@ model ImportBatch {
   // menolak import file yang sama/lebih lawas dari import sebelumnya.
   fileModifiedTime DateTime?
   fileSize       Int?
+  // Tanggal laporan yang DIPILIH user di Dasbor Harian (WIB-as-UTC, 00:00Z =
+  // tanggal kalender WIB). Beda dari fileModifiedTime (mtime file) & importedAt
+  // (waktu server). Mengelompokkan batch harian → dipakai membangun snapshot
+  // laporan beku per tanggal. NULL untuk impor lewat halaman /import lama.
+  reportDate     DateTime?
   importedAt     DateTime @default(now())
   rowsInserted   Int      @default(0)
   rowsUpdated    Int      @default(0)
   rowsSkipped    Int      @default(0)
+
+  @@index([reportDate])
+}
+
+// Snapshot laporan Dasbor Harian yang DIBEKUKAN saat impor. payload = JSON
+// { rows, totals, generatedAt } dengan bentuk baris identik /api/dashboard.
+// Sumber-kebenaran tampilan tabel harian: impor hari berikutnya (yang menimpa
+// status pesanan lama via upsert) TIDAK mengubah snapshot yang sudah tersimpan.
+model DailySnapshot {
+  id         Int      @id @default(autoincrement())
+  reportDate DateTime @unique
+  payload    String
+  computedAt DateTime @default(now())
 }
 
 model Setting {

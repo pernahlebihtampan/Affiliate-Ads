@@ -97,7 +97,8 @@ export async function importMetaAdCsv(
   metaAdAccountId: number,
   fileName: string,
   rows: MetaAdRow[],
-  fileMeta?: ImportFileMeta
+  fileMeta?: ImportFileMeta,
+  reportDate?: Date
 ): Promise<ImportResult> {
   const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: [] };
   // Inline agar string JSON besar tidak tertahan di scope selama impor berjalan
@@ -120,7 +121,7 @@ export async function importMetaAdCsv(
   const importBatch = await prisma.importBatch.create({
     data: {
       type: "meta", accountId: metaAdAccountId, accountType: "meta",
-      fileName, fileHash, ...fileMetaData(fileMeta),
+      fileName, fileHash, ...fileMetaData(fileMeta), reportDate,
     },
   });
 
@@ -221,7 +222,8 @@ export async function importMetaAdPlacementCsv(
   metaAdAccountId: number,
   fileName: string,
   rows: MetaAdPlacementRow[],
-  fileMeta?: ImportFileMeta
+  fileMeta?: ImportFileMeta,
+  reportDate?: Date
 ): Promise<ImportResult> {
   const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: [] };
   const fileHash = computeFileHash(JSON.stringify(rows));
@@ -243,7 +245,7 @@ export async function importMetaAdPlacementCsv(
   const importBatch = await prisma.importBatch.create({
     data: {
       type: "meta_placement", accountId: metaAdAccountId, accountType: "meta",
-      fileName, fileHash, ...fileMetaData(fileMeta),
+      fileName, fileHash, ...fileMetaData(fileMeta), reportDate,
     },
   });
 
@@ -322,7 +324,8 @@ export async function importShopeeClickCsv(
   shopeeAccountId: number,
   fileName: string,
   rows: ShopeeClickRow[],
-  fileMeta?: ImportFileMeta
+  fileMeta?: ImportFileMeta,
+  reportDate?: Date
 ): Promise<ImportResult> {
   const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: [] };
   // Inline agar string JSON besar tidak tertahan di scope selama impor berjalan
@@ -345,7 +348,7 @@ export async function importShopeeClickCsv(
   const importBatch = await prisma.importBatch.create({
     data: {
       type: "shopee_click", accountId: shopeeAccountId, accountType: "shopee",
-      fileName, fileHash, ...fileMetaData(fileMeta),
+      fileName, fileHash, ...fileMetaData(fileMeta), reportDate,
     },
   });
 
@@ -418,7 +421,8 @@ export async function importShopeeCommissionCsv(
   shopeeAccountId: number,
   fileName: string,
   rows: ShopeeCommissionRow[],
-  fileMeta?: ImportFileMeta
+  fileMeta?: ImportFileMeta,
+  reportDate?: Date
 ): Promise<ImportResult> {
   const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: [] };
   // Inline agar string JSON besar tidak tertahan di scope selama impor berjalan
@@ -441,7 +445,7 @@ export async function importShopeeCommissionCsv(
   const importBatch = await prisma.importBatch.create({
     data: {
       type: "shopee_commission", accountId: shopeeAccountId, accountType: "shopee",
-      fileName, fileHash, ...fileMetaData(fileMeta),
+      fileName, fileHash, ...fileMetaData(fileMeta), reportDate,
     },
   });
 
