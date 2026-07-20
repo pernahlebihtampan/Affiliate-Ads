@@ -45,6 +45,7 @@ yarn-error.log*
 *.db-wal
 *.db-shm
 dev.db.backup.*
+dev.db*
 
 # typescript
 *.tsbuildinfo

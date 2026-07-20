@@ -4,7 +4,7 @@
 
 Dashboard web untuk melacak profitabilitas bisnis affiliate: **Meta Ads** (biaya iklan) → trafik → **Shopee Affiliate** (klik & komisi). Versi web dari aplikasi desktop lama (WinForms .NET / SQL Server), disederhanakan untuk pasangan Shopee + Meta saja. Single-user, jalan lokal (`localhost:3000`), tanpa autentikasi.
 
-Baca `SPEC-AffiliateAds.md` untuk konteks bisnis lengkap dan alasan tiap keputusan — dokumen ini merangkum **cara kode benar-benar bekerja sekarang**.
+Dokumen ini merangkum **cara kode benar-benar bekerja sekarang** — konteks bisnis & alasan tiap keputusan.
 
 ## Stack
 
@@ -95,6 +95,5 @@ Threshold skor > 0.3. Respons `suggest` menyertakan `nameScore`/`dataScore` (0�
 
 ## Catatan penting
 
-- Sample CSV asli ada di `Referensi/CSV/` (OOTD & Spilin, Meta 1 Mei–15 Jul 2026). **`Referensi/` gitignored** — folder referensi termasuk source app desktop lama (`Referensi/Affiliate/`, C#/WinForms) sebagai acuan pola.
 - Bahasa domain & UI = **Indonesia**. Currency format `id-ID` IDR tanpa desimal.
-- Belum ada test. Verifikasi impor secara end-to-end pakai file di `Referensi/CSV/`.
+- Belum ada test. Verifikasi impor secara end-to-end dengan mengunggah CSV ekspor asli (Meta Ads, Shopee Click, Shopee Commission) lewat halaman `/import`.
