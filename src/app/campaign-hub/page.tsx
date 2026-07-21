@@ -343,7 +343,7 @@ export default function CampaignHubPage() {
               onClick={fetchSuggestions}
               className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md text-sm font-medium hover:bg-gray-200"
             >
-              🤖 Auto-Suggest
+              🤖 Sarankan
             </button>
             <button
               onClick={fetchData}

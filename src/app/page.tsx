@@ -40,6 +40,28 @@ interface RangeTable {
   generatedAt: string;
 }
 
+// Bentuk saran dari /api/campaign-hub action "suggest" (dikelompokkan per Meta).
+interface TagCandidate {
+  shopeeCampaignId: number;
+  shopeeCampaignName: string;
+  nameScore: number;
+  contained: boolean;        // true = terkandung persis di nama Meta
+  dataScore?: number | null; // null = data pesanan tidak cukup untuk dinilai
+}
+interface Suggestion {
+  metaCampaignId: number;
+  metaCampaignName: string;
+  candidates: TagCandidate[];
+}
+// Saran terbaik untuk satu tag (hasil inversi grup per-Meta → per-tag).
+type TagSuggestion = {
+  metaId: number;
+  metaName: string;
+  nameScore: number;
+  contained: boolean;
+  dataScore?: number | null;
+};
+
 // Kartu impor per akun: Meta → Meta Ads + Penempatan; Shopee → Komisi + Klik.
 const META_TYPES = [
   { type: "meta", label: "Wilayah" },
@@ -49,6 +71,74 @@ const SHOPEE_TYPES = [
   { type: "shopee_commission", label: "Komisi" },
   { type: "shopee_click", label: "Klik" },
 ];
+
+// Urutan prioritas saran: terkandung persis > skor nama > skor data.
+function isBetterSuggestion(a: TagSuggestion, b: TagSuggestion): boolean {
+  if (a.contained !== b.contained) return a.contained;
+  if (a.nameScore !== b.nameScore) return a.nameScore > b.nameScore;
+  return (a.dataScore ?? -1) > (b.dataScore ?? -1);
+}
+
+// Normalisasi ala matching-engine (huruf a-z saja) sambil melacak posisi tiap
+// huruf di teks mentah, agar span cocok bisa dipetakan balik ke teks asli.
+function normWithMap(name: string): { norm: string; map: number[] } {
+  let norm = "";
+  const map: number[] = [];
+  for (let i = 0; i < name.length; i++) {
+    const ch = name[i].toLowerCase();
+    if (ch >= "a" && ch <= "z") {
+      norm += ch;
+      map.push(i);
+    }
+  }
+  return { norm, map };
+}
+
+// Substring bersama terpanjang antara nama tag & nama Meta (dinormalisasi) →
+// itulah bagian yang membuat tag masuk saran. Kembalikan span di teks Meta mentah.
+function suggestionMatchSpan(metaName: string, tagName: string): { start: number; end: number } | null {
+  const { norm, map } = normWithMap(metaName);
+  const tagNorm = normWithMap(tagName).norm;
+  if (norm.length === 0 || tagNorm.length === 0) return null;
+  // DP longest common substring; simpan indeks akhir di sisi `norm` (Meta).
+  const dp = new Array(tagNorm.length + 1).fill(0);
+  let best = 0;
+  let bestEnd = 0; // indeks akhir (eksklusif) di `norm`
+  for (let i = 1; i <= norm.length; i++) {
+    let prev = 0;
+    for (let j = 1; j <= tagNorm.length; j++) {
+      const tmp = dp[j];
+      if (norm[i - 1] === tagNorm[j - 1]) {
+        dp[j] = prev + 1;
+        if (dp[j] > best) {
+          best = dp[j];
+          bestEnd = i;
+        }
+      } else {
+        dp[j] = 0;
+      }
+      prev = tmp;
+    }
+  }
+  if (best < 4) return null; // terlalu pendek → tak bermakna
+  const startNorm = bestEnd - best;
+  return { start: map[startNorm], end: map[bestEnd - 1] + 1 };
+}
+
+// Render nama Meta dengan span pencocokan tag di-highlight (bila ada).
+function highlightSuggestion(metaName: string, tagName: string) {
+  const span = suggestionMatchSpan(metaName, tagName);
+  if (!span) return metaName;
+  return (
+    <>
+      {metaName.slice(0, span.start)}
+      <mark className="bg-yellow-200 text-inherit rounded-sm">
+        {metaName.slice(span.start, span.end)}
+      </mark>
+      {metaName.slice(span.end)}
+    </>
+  );
+}
 
 function formatTanggal(iso: string): string {
   // iso = "YYYY-MM-DD"; baca sebagai UTC agar tidak bergeser hari
@@ -88,6 +178,10 @@ export default function DailyDashboardPage() {
     [unlinkedTags, hideNoise]
   );
   const [linkPick, setLinkPick] = useState<Record<number, number>>({}); // shopeeId → metaId
+  // Auto-Suggest: saran Meta terbaik per tag (shopeeId → saran), diisi tombol
+  // "Auto-Suggest". Dipakai untuk menampilkan hint & pre-isi `linkPick`.
+  const [suggestByTag, setSuggestByTag] = useState<Record<number, TagSuggestion>>({});
+  const [suggesting, setSuggesting] = useState(false);
 
   // Lazy-refresh: Laporan & Rentang ditandai "perlu muat ulang" saat sumbernya
   // berubah (impor/tautan), lalu di-refetch saat tab-nya dibuka. Hubungkan
@@ -205,6 +299,56 @@ export default function DailyDashboardPage() {
       }
     } finally {
       setRecomputing(false);
+    }
+  }
+
+  // Auto-Suggest: ambil saran koneksi (dikelompokkan per Meta), inversi jadi
+  // saran terbaik per tag, lalu pre-isi `linkPick` untuk tag yang belum dipilih.
+  async function fetchSuggestions() {
+    setSuggesting(true);
+    try {
+      const res = await fetch("/api/campaign-hub", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "suggest" }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        showToast("Gagal", d.error || `HTTP ${res.status}`, "destructive");
+        return;
+      }
+      const data = await res.json();
+      const groups: Suggestion[] = data.suggestions || [];
+      // Inversi per-Meta → per-tag: simpan kandidat terbaik tiap tag
+      // (terkandung dulu, lalu skor nama tertinggi, lalu skor data).
+      const byTag: Record<number, TagSuggestion> = {};
+      for (const g of groups) {
+        for (const c of g.candidates) {
+          const cand: TagSuggestion = {
+            metaId: g.metaCampaignId,
+            metaName: g.metaCampaignName,
+            nameScore: c.nameScore,
+            contained: c.contained,
+            dataScore: c.dataScore,
+          };
+          const cur = byTag[c.shopeeCampaignId];
+          if (!cur || isBetterSuggestion(cand, cur)) byTag[c.shopeeCampaignId] = cand;
+        }
+      }
+      setSuggestByTag(byTag);
+      // Pre-isi pilihan: hanya tag yang belum dipilih manual (jangan menimpa).
+      setLinkPick((p) => {
+        const next = { ...p };
+        for (const [sid, s] of Object.entries(byTag)) {
+          if (next[+sid] == null) next[+sid] = s.metaId;
+        }
+        return next;
+      });
+      const n = Object.keys(byTag).length;
+      if (n > 0) showToast(`${n} tag dapat saran koneksi`, undefined, "success");
+      else showToast("Tidak ada saran", "Coba impor data terlebih dahulu");
+    } finally {
+      setSuggesting(false);
     }
   }
 
@@ -407,9 +551,18 @@ export default function DailyDashboardPage() {
                 Tag Shopee yang belum ditautkan ke kampanye Meta. Menautkan akan menghitung ulang
                 snapshot tanggal aktif.
               </p>
-              <a href="/campaign-hub" className="text-sm text-primary hover:underline">
-                Buka Pusat Kampanye (Auto-Suggest) →
-              </a>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={fetchSuggestions}
+                  disabled={suggesting || visibleUnlinkedTags.length === 0}
+                  className="px-3 py-1.5 text-sm bg-secondary text-secondary-foreground rounded-md font-medium hover:bg-gray-200 disabled:opacity-50"
+                >
+                  {suggesting ? "Mencari…" : "🤖 Sarankan"}
+                </button>
+                <a href="/campaign-hub" className="text-sm text-primary hover:underline">
+                  Buka Pusat Kampanye →
+                </a>
+              </div>
             </div>
             {visibleUnlinkedTags.length === 0 ? (
               <p className="text-sm text-muted-foreground">
@@ -417,33 +570,50 @@ export default function DailyDashboardPage() {
               </p>
             ) : (
               <div className="bg-white rounded-lg border divide-y">
-                {visibleUnlinkedTags.map((tag) => (
-                  <div key={tag.id} className="flex items-center gap-3 p-3 flex-wrap">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{tag.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{tag.accountName}</p>
+                {visibleUnlinkedTags.map((tag) => {
+                  const sug = suggestByTag[tag.id];
+                  return (
+                    <div key={tag.id} className="p-3 space-y-2">
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <p className="text-sm font-medium">{tag.name}</p>
+                        <span className="text-xs text-muted-foreground">{tag.accountName}</span>
+                        {sug && (
+                          <span className="text-xs">
+                            <span className={sug.contained ? "text-green-600" : "text-amber-600"}>
+                              {sug.contained ? "■" : "~"}
+                            </span>{" "}
+                            Saran: <span className="font-medium">{highlightSuggestion(sug.metaName, tag.name)}</span>{" "}
+                            <span className="text-muted-foreground">
+                              (nama {sug.nameScore}%
+                              {sug.dataScore != null ? ` · 📊 data ${sug.dataScore}%` : ""})
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <SearchSelect
+                          items={metaCampaigns}
+                          value={linkPick[tag.id] ?? null}
+                          onChange={(id) =>
+                            setLinkPick((p) => ({ ...p, [tag.id]: id as number }))
+                          }
+                          getKey={(m) => m.id}
+                          displayFn={(m) => m.name}
+                          placeholder="Pilih kampanye Meta…"
+                          wrapperClassName="basis-3/4 shrink-0"
+                          className="w-full"
+                        />
+                        <button
+                          onClick={() => linkTag(tag.id)}
+                          disabled={!linkPick[tag.id]}
+                          className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Hubungkan
+                        </button>
+                      </div>
                     </div>
-                    <SearchSelect
-                      items={metaCampaigns}
-                      value={linkPick[tag.id] ?? null}
-                      onChange={(id) =>
-                        setLinkPick((p) => ({ ...p, [tag.id]: id as number }))
-                      }
-                      getKey={(m) => m.id}
-                      displayFn={(m) => m.name}
-                      placeholder="Pilih kampanye Meta…"
-                      wrapperClassName="basis-3/4 shrink-0"
-                      className="w-full"
-                    />
-                    <button
-                      onClick={() => linkTag(tag.id)}
-                      disabled={!linkPick[tag.id]}
-                      className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      Hubungkan
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
