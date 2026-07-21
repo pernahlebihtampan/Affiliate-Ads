@@ -4,6 +4,24 @@ import { useState, useEffect, useRef } from "react";
 
 type Key = string | number;
 
+// Tandai (highlight) potongan teks yang cocok dengan kueri pencarian.
+// Pencocokan substring kontigu & case-insensitive — sama dengan logika filter.
+function highlightMatch(text: string, query: string) {
+  if (!query) return text;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return text;
+  const end = idx + query.length;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-yellow-200 text-inherit rounded-sm">
+        {text.slice(idx, end)}
+      </mark>
+      {text.slice(end)}
+    </>
+  );
+}
+
 // Combobox dengan pencarian. Dipakai di Pusat Kampanye, Dasbor, Ringkasan,
 // Performa Klik/Wilayah/Penempatan.
 // - `value`/`onChange` memakai kunci generik (string | number).
@@ -41,6 +59,7 @@ export function SearchSelect<T>({
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const filtered = search
     ? items.filter((item) =>
@@ -62,6 +81,11 @@ export function SearchSelect<T>({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Fokuskan input begitu komponen berubah jadi kotak pencarian.
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
   const pick = (v: Key | null) => {
     onChange(v);
     setOpen(false);
@@ -73,34 +97,36 @@ export function SearchSelect<T>({
       {label && (
         <label className="text-xs text-muted-foreground block mb-1">{label}</label>
       )}
+      {/* Saat terbuka, trigger ini SENDIRI berubah jadi kotak pencarian di tempat. */}
       <div
         className={`px-3 py-2 border rounded-md text-sm flex items-center justify-between ${
           disabled
             ? "bg-gray-100 text-gray-400 cursor-not-allowed"
             : "bg-white cursor-pointer"
-        } ${className || ""}`}
-        onClick={() => !disabled && setOpen(!open)}
+        } ${open ? "ring-1 ring-blue-400" : ""} ${className || ""}`}
+        onClick={() => !disabled && !open && setOpen(true)}
         title={title}
       >
-        <span className={`truncate ${selected || (!placeholder && allLabel) ? "" : "text-gray-400"}`}>
-          {selected ? displayFn(selected) : placeholder || allLabel || "-- Pilih --"}
-        </span>
+        {open && !disabled ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={selected ? displayFn(selected) : placeholder || "Ketik untuk mencari..."}
+            className="flex-1 min-w-0 bg-transparent outline-none placeholder:text-gray-400"
+          />
+        ) : (
+          <span className={`truncate ${selected || (!placeholder && allLabel) ? "" : "text-gray-400"}`}>
+            {selected ? displayFn(selected) : placeholder || allLabel || "-- Pilih --"}
+          </span>
+        )}
         <svg className={`w-4 h-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </div>
       {open && !disabled && (
         <div className="absolute z-20 mt-1 w-full bg-white border rounded-md shadow-lg max-h-72 flex flex-col">
-          <div className="p-1 border-b">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Ketik untuk mencari..."
-              className="w-full px-2 py-1.5 border rounded text-sm outline-none focus:ring-1 focus:ring-blue-400"
-              autoFocus
-            />
-          </div>
           <div className="overflow-y-auto flex-1">
             {allLabel && (
               <div
@@ -126,7 +152,7 @@ export function SearchSelect<T>({
                       }`}
                       onClick={() => pick(k)}
                     >
-                      {displayFn(item)}
+                      {highlightMatch(displayFn(item), search)}
                     </div>
                   );
                 })}
