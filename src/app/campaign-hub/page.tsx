@@ -19,6 +19,10 @@ interface ShopeeCampaign {
   name: string;
   shopeeAccount: { id: number; name: string };
   hub: { metaCampaignId: number } | null;
+  // Total sepanjang waktu (dari /api/campaign-hub) untuk menyembunyikan tag tak
+  // berarti di dropdown "Cari Tag": komisi 0 & klik < 10.
+  komisiTotal?: number;
+  klikTotal?: number;
 }
 
 interface Suggestion {
@@ -286,7 +290,11 @@ export default function CampaignHubPage() {
     return true;
   });
 
-  const unlinkedShopee = shopeeCampaigns.filter((s) => !s.hub);
+  // Tag belum tertaut, tanpa yang tak berarti (komisi 0 & klik < 10 sepanjang
+  // waktu) — sumber untuk dropdown "Cari Tag" (SearchSelect utama & QuickShopeeSearch).
+  const unlinkedShopee = shopeeCampaigns.filter(
+    (s) => !s.hub && !((s.komisiTotal ?? 0) === 0 && (s.klikTotal ?? 0) < 10),
+  );
 
   return (
     <DashboardLayout>

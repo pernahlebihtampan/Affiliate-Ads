@@ -2,6 +2,36 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { suggestConnections, type DailySeries } from "@/lib/matching-engine";
 
+// Total komisi & total klik per tag Shopee (sepanjang waktu). Dipakai UI untuk
+// menyembunyikan tag tak berarti (komisi 0 & klik < 10): tab Hubungkan dasbor &
+// dropdown "Cari Tag" di Pusat Kampanye. Komisi Dibatalkan selalu 0 (komisiBersihRp)
+// → SUM apa adanya sudah benar.
+async function attachTagStats<T extends { id: number }>(
+  campaigns: T[],
+): Promise<(T & { komisiTotal: number; klikTotal: number })[]> {
+  const ids = campaigns.map((c) => c.id);
+  if (ids.length === 0) return [];
+  const [komisiByTag, klikByTag] = await Promise.all([
+    prisma.shopeeOrderItem.groupBy({
+      by: ["shopeeCampaignId"],
+      _sum: { komisiBersihRp: true },
+      where: { shopeeCampaignId: { in: ids } },
+    }),
+    prisma.shopeeClick.groupBy({
+      by: ["shopeeCampaignId"],
+      _count: { klikId: true },
+      where: { shopeeCampaignId: { in: ids } },
+    }),
+  ]);
+  const komisiMap = new Map(komisiByTag.map((r) => [r.shopeeCampaignId, r._sum.komisiBersihRp ?? 0]));
+  const klikMap = new Map(klikByTag.map((r) => [r.shopeeCampaignId, r._count.klikId]));
+  return campaigns.map((c) => ({
+    ...c,
+    komisiTotal: komisiMap.get(c.id) ?? 0,
+    klikTotal: klikMap.get(c.id) ?? 0,
+  }));
+}
+
 export async function GET() {
   // Get all Meta campaigns (1 Meta : banyak Shopee → hubs[])
   const metaCampaigns = await prisma.metaCampaign.findMany({
@@ -21,7 +51,9 @@ export async function GET() {
     orderBy: { name: "asc" },
   });
 
-  return NextResponse.json({ metaCampaigns, shopeeCampaigns });
+  const shopeeCampaignsWithStats = await attachTagStats(shopeeCampaigns);
+
+  return NextResponse.json({ metaCampaigns, shopeeCampaigns: shopeeCampaignsWithStats });
 }
 
 export async function POST(request: NextRequest) {
@@ -124,7 +156,11 @@ export async function POST(request: NextRequest) {
       maxOrderDate,
     );
 
-    return NextResponse.json({ suggestions, shopeeCampaigns, metaCampaigns });
+    return NextResponse.json({
+      suggestions,
+      shopeeCampaigns: await attachTagStats(shopeeCampaigns),
+      metaCampaigns,
+    });
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });

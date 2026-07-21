@@ -111,7 +111,11 @@ export default function DailyDashboardPage() {
     );
     setUnlinkedTags(
       (data.shopeeCampaigns ?? [])
-        .filter((s: { hub: unknown }) => !s.hub)
+        // Belum tertaut, dan sembunyikan tag tak berarti: komisi 0 & klik < 10.
+        .filter(
+          (s: { hub: unknown; komisiTotal?: number; klikTotal?: number }) =>
+            !s.hub && !((s.komisiTotal ?? 0) === 0 && (s.klikTotal ?? 0) < 10)
+        )
         .map((s: { id: number; name: string; shopeeAccount: { name: string } }) => ({
           id: s.id, name: s.name, accountName: s.shopeeAccount?.name ?? "",
         }))

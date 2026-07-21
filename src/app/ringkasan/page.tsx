@@ -230,8 +230,44 @@ export default function DashboardPage() {
     }
   };
 
+  // Sembunyikan tag Shopee tak berarti pada RENTANG terpilih: total komisi 0 &
+  // total klik < 10. Rincian per-tag di-trim; baris "Belum tertaut" (tag lepas)
+  // yang tak berarti dibuang. Baris kampanye Meta tetap tampil (punya spend/ROAS).
+  // Kartu ringkasan di atas tetap memakai total penuh; footer tabel dihitung ulang
+  // agar cocok dengan baris yang terlihat (baris tersembunyi spend & komisinya 0,
+  // jadi hanya Klik Shopee & Pesanan yang berkurang — ROAS/Spend/Komisi tetap).
+  const isNoiseTag = (totalKomisi: number, shopeeClicks: number) =>
+    totalKomisi === 0 && shopeeClicks < 10;
+  const visibleRows = rows
+    .map((r) => ({
+      ...r,
+      tags: r.tags.filter((t) => !isNoiseTag(t.totalKomisi, t.shopeeClicks)),
+    }))
+    .filter(
+      (r) => !(r.metaCampaignId === null && isNoiseTag(r.totalKomisi, r.shopeeClicks))
+    );
+  const visibleTotals: Totals | null = (() => {
+    if (!totals) return null;
+    const hidden = rows.filter(
+      (r) => r.metaCampaignId === null && isNoiseTag(r.totalKomisi, r.shopeeClicks)
+    );
+    if (hidden.length === 0) return totals;
+    const d = hidden.reduce(
+      (a, r) => ({
+        shopeeClicks: a.shopeeClicks + r.shopeeClicks,
+        orders: a.orders + r.orders,
+      }),
+      { shopeeClicks: 0, orders: 0 }
+    );
+    return {
+      ...totals,
+      shopeeClicks: totals.shopeeClicks - d.shopeeClicks,
+      orders: totals.orders - d.orders,
+    };
+  })();
+
   const sortedRows = sortKey
-    ? [...rows].sort((a, b) => {
+    ? [...visibleRows].sort((a, b) => {
         const va = a[sortKey];
         const vb = b[sortKey];
         const cmp =
@@ -240,7 +276,7 @@ export default function DashboardPage() {
             : Number(va) - Number(vb);
         return sortDir === "asc" ? cmp : -cmp;
       })
-    : rows;
+    : visibleRows;
 
   const getRoasColor = (roas: number) => {
     if (roas < 1) return "text-red-600 bg-red-50";
@@ -569,7 +605,7 @@ export default function DashboardPage() {
                       Memuat data...
                     </td>
                   </tr>
-                ) : rows.length === 0 ? (
+                ) : visibleRows.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="p-6 text-center text-muted-foreground">
                       Belum ada data. Import CSV atau hubungkan kampanye di Pusat Kampanye.
@@ -717,27 +753,27 @@ export default function DashboardPage() {
                   })
                 )}
               </tbody>
-              {totals && rows.length > 0 && (
+              {visibleTotals && visibleRows.length > 0 && (
                 <tfoot>
                   <tr className="bg-gray-50 font-medium">
                     <td className="p-3" colSpan={4}>
-                      Total ({rows.length} kampanye)
+                      Total ({visibleRows.length} kampanye)
                     </td>
-                    <td className="p-3 text-right">{formatCurrency(totals.spend)}</td>
-                    <td className="p-3 text-right">{formatNumber(totals.metaClicks)}</td>
-                    <td className="p-3 text-right">{formatNumber(totals.shopeeClicks)}</td>
-                    <td className="p-3 text-right">{formatNumber(totals.orders)}</td>
+                    <td className="p-3 text-right">{formatCurrency(visibleTotals.spend)}</td>
+                    <td className="p-3 text-right">{formatNumber(visibleTotals.metaClicks)}</td>
+                    <td className="p-3 text-right">{formatNumber(visibleTotals.shopeeClicks)}</td>
+                    <td className="p-3 text-right">{formatNumber(visibleTotals.orders)}</td>
                     <td className="p-3 text-right">
                       {regionFilter && "±"}
-                      {formatCurrency(totals.totalKomisi)}
+                      {formatCurrency(visibleTotals.totalKomisi)}
                     </td>
                     <td className="p-3 text-right">
                       <span
                         className={`px-2 py-0.5 rounded text-xs font-medium ${getRoasColor(
-                          totals.roas
+                          visibleTotals.roas
                         )}`}
                       >
-                        {totals.roas.toFixed(2)}x
+                        {visibleTotals.roas.toFixed(2)}x
                       </span>
                     </td>
                   </tr>

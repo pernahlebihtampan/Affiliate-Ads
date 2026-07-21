@@ -106,13 +106,57 @@ export function ReportTable({
       return next;
     });
   };
-  // Baris yang punya rincian per-tag (1 Meta : >1 tag Shopee)
-  const expandableIds = useMemo(
+  // Sembunyikan tag Shopee tak berarti PADA tanggal laporan ini: komisi 0 & klik
+  // < 10. Diterapkan ke rincian per-tag (di-trim) dan ke baris tag lepas (belum
+  // tertaut) yang juga tak berarti. Baris kampanye Meta tetap tampil (punya spend/
+  // ROAS); totalnya utuh, jadi footer dihitung ulang hanya dengan mengurangi baris
+  // tag lepas yang disembunyikan (spend & komisinya 0 → ROAS/profit tak berubah).
+  const isNoiseTag = (totalKomisi: number, shopeeClicks: number) =>
+    totalKomisi === 0 && shopeeClicks < 10;
+  const visibleRows = useMemo(
     () =>
       rows
+        .map((r) => ({
+          ...r,
+          tags: r.tags.filter((t) => !isNoiseTag(t.totalKomisi, t.shopeeClicks)),
+        }))
+        .filter(
+          (r) => !(r.metaCampaignId === null && isNoiseTag(r.totalKomisi, r.shopeeClicks))
+        ),
+    [rows]
+  );
+  const visibleTotals = useMemo<ReportTotals | null>(() => {
+    if (!totals) return null;
+    const hidden = rows.filter(
+      (r) => r.metaCampaignId === null && isNoiseTag(r.totalKomisi, r.shopeeClicks)
+    );
+    if (hidden.length === 0) return totals;
+    const d = hidden.reduce(
+      (a, r) => {
+        a.shopeeClicks += r.shopeeClicks;
+        a.orders += r.orders;
+        a.items += r.items;
+        a.nilaiPembelian += r.nilaiPembelian;
+        return a;
+      },
+      { shopeeClicks: 0, orders: 0, items: 0, nilaiPembelian: 0 }
+    );
+    return {
+      ...totals,
+      shopeeClicks: totals.shopeeClicks - d.shopeeClicks,
+      orders: totals.orders - d.orders,
+      items: totals.items - d.items,
+      nilaiPembelian: totals.nilaiPembelian - d.nilaiPembelian,
+    };
+  }, [rows, totals]);
+
+  // Baris yang punya rincian per-tag (1 Meta : >1 tag Shopee terlihat)
+  const expandableIds = useMemo(
+    () =>
+      visibleRows
         .filter((r) => r.metaCampaignId !== null && r.tags.length > 1)
         .map((r) => r.metaCampaignId as number),
-    [rows]
+    [visibleRows]
   );
   const anyExpanded = expandableIds.some((id) => !collapsed.has(id));
   const toggleAll = () =>
@@ -130,8 +174,8 @@ export function ReportTable({
     }
   };
   const sortedRows = useMemo(() => {
-    if (!sortKey) return rows;
-    const arr = [...rows];
+    if (!sortKey) return visibleRows;
+    const arr = [...visibleRows];
     arr.sort((a, b) => {
       const av = a[sortKey];
       const bv = b[sortKey];
@@ -142,7 +186,7 @@ export function ReportTable({
       return sortDir === "asc" ? cmp : -cmp;
     });
     return arr;
-  }, [rows, sortKey, sortDir]);
+  }, [visibleRows, sortKey, sortDir]);
 
   return (
     <div className="bg-white rounded-lg border overflow-hidden">
@@ -196,7 +240,7 @@ export function ReportTable({
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={10} className="p-6 text-center text-muted-foreground">
                   {emptyMessage}
@@ -323,24 +367,24 @@ export function ReportTable({
               })
             )}
           </tbody>
-          {totals && rows.length > 0 && (
+          {visibleTotals && visibleRows.length > 0 && (
             <tfoot>
               <tr className="bg-gray-50 font-medium">
                 <td className="p-3" colSpan={4}>
-                  Total ({rows.length} kampanye)
+                  Total ({visibleRows.length} kampanye)
                 </td>
-                <td className="p-3 text-right">{formatCurrency(totals.spend)}</td>
-                <td className="p-3 text-right">{formatNumber(totals.metaClicks)}</td>
-                <td className="p-3 text-right">{formatNumber(totals.shopeeClicks)}</td>
-                <td className="p-3 text-right">{formatNumber(totals.orders)}</td>
-                <td className="p-3 text-right">{formatCurrency(totals.totalKomisi)}</td>
+                <td className="p-3 text-right">{formatCurrency(visibleTotals.spend)}</td>
+                <td className="p-3 text-right">{formatNumber(visibleTotals.metaClicks)}</td>
+                <td className="p-3 text-right">{formatNumber(visibleTotals.shopeeClicks)}</td>
+                <td className="p-3 text-right">{formatNumber(visibleTotals.orders)}</td>
+                <td className="p-3 text-right">{formatCurrency(visibleTotals.totalKomisi)}</td>
                 <td className="p-3 text-right">
                   <span
                     className={`px-2 py-0.5 rounded text-xs font-medium ${getRoasColor(
-                      totals.roas
+                      visibleTotals.roas
                     )}`}
                   >
-                    {totals.roas.toFixed(2)}x
+                    {visibleTotals.roas.toFixed(2)}x
                   </span>
                 </td>
               </tr>
