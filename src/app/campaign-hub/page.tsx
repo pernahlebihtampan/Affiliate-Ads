@@ -448,8 +448,7 @@ export default function CampaignHubPage() {
 
         {/* Campaign List */}
         <div ref={tableRef} className="bg-white rounded-lg border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b">
                   <th className="text-left p-3 font-medium">Kampanye Meta</th>
@@ -549,8 +548,7 @@ export default function CampaignHubPage() {
                   })
                 )}
               </tbody>
-            </table>
-          </div>
+          </table>
         </div>
       </div>
     </DashboardLayout>

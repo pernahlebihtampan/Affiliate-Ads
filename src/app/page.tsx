@@ -410,7 +410,8 @@ export default function DailyDashboardPage() {
                       getKey={(m) => m.id}
                       displayFn={(m) => m.name}
                       placeholder="Pilih kampanye Meta…"
-                      className="w-72"
+                      wrapperClassName="basis-3/4 shrink-0"
+                      className="w-full"
                     />
                     <button
                       onClick={() => linkTag(tag.id)}

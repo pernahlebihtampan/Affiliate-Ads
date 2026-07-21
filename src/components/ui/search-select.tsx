@@ -19,6 +19,7 @@ export function SearchSelect<T>({
   placeholder,
   allLabel,
   className,
+  wrapperClassName,
   disabled,
   title,
 }: {
@@ -31,6 +32,9 @@ export function SearchSelect<T>({
   placeholder?: string;
   allLabel?: string;
   className?: string;
+  // Kelas untuk wrapper luar (flex item / lebar). `className` hanya mengenai
+  // trigger di dalamnya, jadi lebar berbasis flex (mis. `basis-3/4`) harus lewat sini.
+  wrapperClassName?: string;
   disabled?: boolean;
   title?: string;
 }) {
@@ -65,7 +69,7 @@ export function SearchSelect<T>({
   };
 
   return (
-    <div ref={wrapperRef} className="relative">
+    <div ref={wrapperRef} className={`relative ${wrapperClassName || ""}`}>
       {label && (
         <label className="text-xs text-muted-foreground block mb-1">{label}</label>
       )}
