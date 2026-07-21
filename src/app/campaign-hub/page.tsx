@@ -25,14 +25,20 @@ interface ShopeeCampaign {
   klikTotal?: number;
 }
 
+// Satu tag Shopee yang terkandung/cocok di nama sebuah kampanye Meta.
+interface TagCandidate {
+  shopeeCampaignId: number;
+  shopeeCampaignName: string;
+  nameScore: number;
+  contained: boolean;        // true = terkandung persis di nama Meta
+  dataScore?: number | null; // null = data pesanan tidak cukup untuk dinilai
+}
+
+// Saran = satu kampanye Meta dengan SEMUA tag Shopee yang terkandung di namanya.
 interface Suggestion {
   metaCampaignId: number;
   metaCampaignName: string;
-  shopeeCampaignId: number;
-  shopeeCampaignName: string;
-  score: number;
-  nameScore?: number;
-  dataScore?: number | null; // null = data pesanan tidak cukup untuk dinilai
+  candidates: TagCandidate[];
 }
 
 // ===== QUICK SHOPEE SEARCH (inline di kolom Aksi) =====
@@ -211,11 +217,17 @@ export default function CampaignHubPage() {
       });
       if (!res.ok) throw new Error("Gagal mendapatkan saran");
       const data = await res.json();
-      setSuggestions(data.suggestions || []);
+      const groups: Suggestion[] = data.suggestions || [];
+      setSuggestions(groups);
       setShopeeCampaigns(data.shopeeCampaigns || []);
       setMetaCampaigns(data.metaCampaigns || []);
-      if (data.suggestions?.length > 0) {
-        showToast(`${data.suggestions.length} saran koneksi ditemukan`, undefined, "success");
+      if (groups.length > 0) {
+        const totalTags = groups.reduce((n, g) => n + g.candidates.length, 0);
+        showToast(
+          `${groups.length} kampanye Meta · ${totalTags} tag disarankan`,
+          undefined,
+          "success",
+        );
       } else {
         showToast("Tidak ada saran", "Coba impor data terlebih dahulu");
       }
@@ -241,7 +253,16 @@ export default function CampaignHubPage() {
         throw new Error(errData.error || `Error ${res.status}`);
       }
       showToast("Kampanye terhubung!", undefined, "success");
-      setSuggestions((prev) => prev.filter((s) => s.metaCampaignId !== metaId));
+      // Buang tag yang baru ditaut dari grup saran; buang grup bila kosong.
+      setSuggestions((prev) =>
+        prev
+          .map((g) =>
+            g.metaCampaignId === metaId
+              ? { ...g, candidates: g.candidates.filter((c) => c.shopeeCampaignId !== shopeeId) }
+              : g,
+          )
+          .filter((g) => g.candidates.length > 0),
+      );
       setSelectedMetaId(null);
       setSelectedShopeeId(null);
       setQuickSelectMeta(null);
@@ -250,6 +271,13 @@ export default function CampaignHubPage() {
       showToast("Gagal menghubungkan", String(e), "destructive");
     } finally {
       setLinkingId(null);
+    }
+  };
+
+  // Tautkan semua tag yang disarankan untuk satu kampanye Meta sekaligus.
+  const handleLinkAll = async (group: Suggestion) => {
+    for (const c of group.candidates) {
+      await handleLink(group.metaCampaignId, c.shopeeCampaignId);
     }
   };
 
@@ -359,35 +387,58 @@ export default function CampaignHubPage() {
           </div>
         </div>
 
-        {/* Suggestions */}
+        {/* Suggestions — dikelompokkan per kampanye Meta (1 Meta : banyak tag) */}
         {suggestions.length > 0 && (
           <div className="bg-white rounded-lg border p-4 space-y-3">
             <h2 className="font-medium">
-              💡 Saran Koneksi ({suggestions.length})
+              💡 Saran Koneksi — {suggestions.length} kampanye ·{" "}
+              {suggestions.reduce((n, g) => n + g.candidates.length, 0)} tag
             </h2>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {suggestions.map((s) => (
-                <div
-                  key={s.metaCampaignId}
-                  className="flex items-center justify-between p-2 bg-blue-50 rounded text-sm"
-                >
-                  <div className="flex-1">
-                    <span className="font-medium">{s.metaCampaignName}</span>
-                    <span className="text-muted-foreground mx-2">→</span>
-                    <span>{s.shopeeCampaignName}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      (kecocokan: {s.score}%
-                      {s.nameScore != null && ` · nama ${s.nameScore}%`}
-                      {s.dataScore != null ? ` · 📊 data ${s.dataScore}%` : ""})
-                    </span>
+            <p className="text-xs text-muted-foreground">
+              Nama kampanye Meta memuat beberapa tag Shopee. ■ = terkandung persis,
+              ~ = mirip (cek skornya).
+            </p>
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {suggestions.map((g) => (
+                <div key={g.metaCampaignId} className="rounded border bg-blue-50/50">
+                  <div className="flex items-center justify-between gap-2 p-2 border-b">
+                    <span className="font-medium text-sm break-all">{g.metaCampaignName}</span>
+                    <button
+                      onClick={() => handleLinkAll(g)}
+                      disabled={linkingId === g.metaCampaignId}
+                      className="shrink-0 px-3 py-1 bg-primary text-primary-foreground rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {linkingId === g.metaCampaignId
+                        ? "..."
+                        : `Sambungkan semua (${g.candidates.length})`}
+                    </button>
                   </div>
-                  <button
-                    onClick={() => handleLink(s.metaCampaignId, s.shopeeCampaignId)}
-                    disabled={linkingId === s.metaCampaignId}
-                    className="px-3 py-1 bg-primary text-primary-foreground rounded text-xs hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {linkingId === s.metaCampaignId ? "..." : "Sambungkan"}
-                  </button>
+                  <div className="divide-y">
+                    {g.candidates.map((c) => (
+                      <div
+                        key={c.shopeeCampaignId}
+                        className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm hover:bg-blue-100 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <span className={c.contained ? "text-green-600" : "text-amber-600"}>
+                            {c.contained ? "■" : "~"}
+                          </span>{" "}
+                          <span className="break-all">{c.shopeeCampaignName}</span>
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            (nama {c.nameScore}%
+                            {c.dataScore != null ? ` · 📊 data ${c.dataScore}%` : ""})
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleLink(g.metaCampaignId, c.shopeeCampaignId)}
+                          disabled={linkingId === g.metaCampaignId}
+                          className="shrink-0 px-3 py-1 bg-white border border-primary text-primary rounded text-xs hover:bg-blue-100 disabled:opacity-50"
+                        >
+                          Sambungkan
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>

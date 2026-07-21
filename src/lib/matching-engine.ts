@@ -8,23 +8,6 @@
 // Known brand prefixes on Meta side — these tell us the "channel"
 export const META_BRAND_PREFIXES = ["SM", "RV", "OOTD", "CR", "VN", "Demik", "DuniaSukaViral", "SukaViral", "Suka Viral", "ViralNih", "SerbaMurah", "RandomViral", "Spilin"];
 
-// Map Meta brand prefixes to their Shopee brand/category equivalents
-const BRAND_MAP = new Map<string, string[]>([
-  ["SM", ["SM", "SerbaMurah"]],
-  ["RV", ["RV", "RandomViral"]],
-  ["OOTD", ["OOTD", "ootd"]],
-  ["CR", ["CR", "CeritaReceh", "SerbaMurah"]],
-  ["VN", ["VN", "ViralNih"]],
-  ["Demik", ["Demik"]],
-  ["DuniaSukaViral", ["SukaViral", "DuniaSukaViral"]],
-  ["SukaViral", ["SukaViral", "DuniaSukaViral"]],
-  ["Suka Viral", ["SukaViral", "DuniaSukaViral"]],
-  ["ViralNih", ["ViralNih", "VN"]],
-  ["SerbaMurah", ["SM", "SerbaMurah", "CR"]],
-  ["RandomViral", ["RV", "RandomViral"]],
-  ["Spilin", ["Spilin"]],
-]);
-
 // Known product name synonyms / aliases for fuzzy matching
 const PRODUCT_SYNONYMS = new Map<string, string[]>([
   ["lembesi", ["lembesi", "setrika", "iron"]],
@@ -142,17 +125,6 @@ export function extractMetaBrand(name: string): string | null {
 }
 
 /**
- * Check if a Shopee campaign name matches any of the brand names associated with a Meta brand
- */
-function brandMatches(metaBrand: string | null, shopeeName: string): boolean {
-  if (!metaBrand) return true; // no brand info -> don't filter by brand
-  const allowedBrands = BRAND_MAP.get(metaBrand);
-  if (!allowedBrands) return true;
-  const upperShopee = shopeeName.toLowerCase();
-  return allowedBrands.some(b => upperShopee.includes(b.toLowerCase()));
-}
-
-/**
  * Extract product keywords (tokens) from a campaign name, removing brand prefixes, dates, numbers, stop words
  */
 function extractKeywords(name: string): string[] {
@@ -227,9 +199,11 @@ function keywordMatchScore(metaWords: string[], shopeeWords: string[]): number {
       if (matchedShopee.has(j)) continue;
       const sw = shopeeWords[j];
       const swSyns = getSynonyms(sw);
-      // Check if any synonym overlaps
+      // Check if any synonym overlaps. Substring match hanya untuk token ≥4 huruf
+      // supaya keyword pendek ("in" dari "6in1") tak menempel ke kata acak
+      // ("pr[in]terfood"). Kecocokan persis/sinonim tetap diterima apa adanya.
       for (const ms of mwSyns) {
-        if (swSyns.has(ms) || sw.includes(ms) || ms.includes(sw)) {
+        if (swSyns.has(ms) || (Math.min(sw.length, ms.length) >= 4 && (sw.includes(ms) || ms.includes(sw)))) {
           matchCount++;
           matchedShopee.add(j);
           found = true;
@@ -273,17 +247,6 @@ function cleanName(name: string): string {
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-/**
- * Normalize name for simple substring checks
- */
-function normalizeName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "")
-    .replace(/(duplikat|duplicate)/g, "duplikat")
-    .replace(/(\d+)(jan|feb|mar|apr|mei|jun|jul|agu|sep|okt|nov|des)/g, "$1");
 }
 
 // =========== SINYAL DATA: KO-AKTIVITAS HARIAN ===========
@@ -357,164 +320,224 @@ export function dataMatchScore(
   return { score, startDiff, cover, conc };
 }
 
-// =========== SARAN KONEKSI ===========
+// =========== SARAN KONEKSI (berbasis containment nama) ===========
+// Nama kampanye Meta = GABUNGAN beberapa nama tag Shopee (1 Meta : banyak tag).
+// Kadang tag dirangkai tanpa spasi & tanpa mengulang kode brand (RV/SM/…) di
+// tengah, mis. "RVLampuMiniGalaxiSikatVelgPompaBanInjak" memuat tag Shopee
+// "RVSikatVelg" & "RVPompaBanInjak" (yang di nama Meta hanya "SikatVelg" dst).
+// Karena itu untuk tiap Meta kami cari SEMUA tag Shopee yang "terkandung":
+//   1. substring persis dari nama Meta ternormalisasi — dicoba dengan DAN tanpa
+//      prefix brand tag (menangkap kasus tanpa-spasi/tanpa-brand-tengah);
+//   2. fuzzy untuk varian typo/urutan-kata: skor per-segmen (pisah spasi) +
+//      gram-recall char-3-gram atas seluruh nama (toleran urutan & tanpa spasi).
+// Sinyal data (ko-aktivitas harian) hanya DITAMPILKAN sebagai info per tag,
+// tidak memengaruhi pemilihan (pencocokan murni berbasis nama sesuai desain).
 
 export interface CampaignLite {
   id: number;
   name: string;
 }
 
-export interface SuggestionResult {
-  metaCampaignId: number;
-  metaCampaignName: string;
+export interface TagCandidate {
   shopeeCampaignId: number;
   shopeeCampaignName: string;
-  score: number;            // 0-100, gabungan
-  nameScore: number;        // 0-100, sinyal nama saja
-  dataScore: number | null; // 0-100, sinyal pola data (null = data tidak cukup)
+  nameScore: number;        // 0-100, skor nama
+  contained: boolean;       // true = substring persis (dengan/tanpa prefix brand)
+  dataScore: number | null; // 0-100, info pola data (null = data tidak cukup)
+}
+
+export interface MetaTagSuggestion {
+  metaCampaignId: number;
+  metaCampaignName: string;
+  candidates: TagCandidate[]; // urut: terkandung dulu, lalu skor tertinggi
+}
+
+// Ambang minimum skor nama fuzzy agar sebuah tag disarankan (terkandung = 1.0).
+const NAME_SCORE_THRESHOLD = 0.5;
+
+/** Buang prefix brand dari nama tag ("RVSikatVelg" → "SikatVelg"). */
+function stripBrandPrefix(name: string): string {
+  const b = extractMetaBrand(name);
+  return b ? name.slice(b.length) : name;
 }
 
 /**
- * Hitung saran koneksi Meta → Shopee (satu kandidat terbaik per kampanye Meta).
- * - Skor nama: brand filter + keyword semantik + substring + char-n-gram (logika lama).
- * - Skor data (opsional): ko-aktivitas harian; menyesuaikan skor nama
- *   (menguatkan bila pola cocok, melemahkan bila bertentangan), dan bisa
- *   menembus filter brand untuk pasangan lintas-brand bila polanya kuat.
- * - Data saja tanpa sinyal nama TIDAK memicu saran — banyak kampanye
- *   diluncurkan serentak sehingga pola harian saja ambigu.
+ * Normalisasi untuk uji containment: buang tanggal/`duplikat`/simbol/angka →
+ * hanya huruf a-z tanpa spasi. Sisi Meta & tag dinormalisasi identik supaya
+ * "SMKlipKasur" cocok apakah muncul dengan spasi, tanpa spasi, atau tanpa brand.
  */
-interface NameCtx {
-  brand: string | null;
-  keywords: string[];
-  clean: string;
-  norm: string;
+function normForContainment(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\d+\s*(jan|feb|mar|apr|mei|jun|jul|agu|sep|okt|nov|des)\w*/g, " ")
+    .replace(/duplikat\d*/g, " ")
+    .replace(/[^a-z0-9]/g, "")
+    .replace(/[0-9]/g, "");
 }
 
-function buildNameCtx(name: string): NameCtx {
-  return {
-    brand: extractMetaBrand(name),
-    keywords: extractKeywords(name),
-    clean: cleanName(name),
-    norm: normalizeName(name),
-  };
+function gramSet(s: string, n = 3): Set<string> {
+  const g = new Set<string>();
+  for (let i = 0; i <= s.length - n; i++) g.add(s.substring(i, i + n));
+  return g;
 }
 
-/** Skor kemiripan nama (langkah 2–7, tanpa filter brand) — 0..~1. */
-function nameScoreCtx(meta: NameCtx, shopee: NameCtx): number {
-  let score = 0;
-
-  // 2. Keyword semantic matching (primary)
-  const kwScore = keywordMatchScore(meta.keywords, shopee.keywords);
-  if (kwScore > 0) {
-    score += kwScore * 0.6; // keyword match weight
-  }
-
-  // 3. Substring matching (strong signal) — porsi nama panjang yang ter-cover
-  //    nama pendek (0..1); dulu rasio terbalik (selalu ≥1) sehingga tag generik
-  //    pendek ("ootd") menang telak atas semua nama panjang.
-  if (meta.norm.includes(shopee.norm) || shopee.norm.includes(meta.norm)) {
-    const subScore = Math.min(shopee.norm.length, meta.norm.length) / Math.max(shopee.norm.length, meta.norm.length);
-    score = Math.max(score, subScore * 0.9);
-  }
-
-  // 4. N-gram similarity (bonus for partial character overlap)
-  const ngScore = charNgramSimilarity(meta.clean, shopee.clean);
-  if (ngScore > 0.3) {
-    score += ngScore * 0.2;
-  }
-
-  // 5. Brand match bonus (same brand prefix = strong signal)
-  if (meta.brand && shopee.brand && meta.brand === shopee.brand) {
-    score += 0.15;
-  }
-
-  // 6. Penalty for very short names (too generic)
-  if (meta.keywords.length <= 1 && shopee.keywords.length <= 1) {
-    score *= 0.5;
-  }
-
-  // 7. Penalty if Meta has many more/fewer keywords than Shopee (mismatch in specificity)
-  const kwRatio = Math.min(meta.keywords.length, shopee.keywords.length) / Math.max(meta.keywords.length, shopee.keywords.length);
-  if (kwRatio < 0.5 && (meta.keywords.length > 2 || shopee.keywords.length > 2)) {
-    score *= 0.7;
-  }
-
-  return score;
+/**
+ * Porsi char-3-gram `needle` yang muncul di `hay` (0..1). Toleran urutan kata &
+ * tanpa spasi — dipakai mencocokkan tag di nama Meta yang dirangkai tanpa spasi.
+ */
+function gramRecall(hay: string, needle: string): number {
+  if (needle.length < 5) return 0;
+  const H = gramSet(hay);
+  const N = gramSet(needle);
+  if (N.size === 0) return 0;
+  let common = 0;
+  for (const g of N) if (H.has(g)) common++;
+  return common / N.size;
 }
 
-/** Skor nama untuk satu pasangan (utk audit/inspeksi) — tanpa filter brand. */
-export function scorePairName(metaName: string, shopeeName: string): number {
-  return nameScoreCtx(buildNameCtx(metaName), buildNameCtx(shopeeName));
+/**
+ * Pecah nama Meta menjadi segmen ~1 tag: pisah spasi, gabungkan token yang hanya
+ * berisi kode brand ("OOTD") ke token berikutnya, buang token brand menggantung.
+ * Untuk nama tanpa spasi ini menghasilkan satu segmen — pencocokan fuzzi/
+ * containment yang menangani kasus itu (extractKeywords tetap memecah CamelCase).
+ */
+function metaSegments(name: string): string[] {
+  const raw = name.trim().split(/\s+/).filter(Boolean);
+  const segs: string[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const t = raw[i];
+    const isBrandOnly = META_BRAND_PREFIXES.some((b) => b.toUpperCase() === t.toUpperCase());
+    if (isBrandOnly) {
+      if (i + 1 < raw.length && extractMetaBrand(raw[i + 1]) === null) {
+        segs.push(t + raw[i + 1]);
+        i++;
+      }
+      continue; // token brand-only menggantung → buang
+    }
+    segs.push(t);
+  }
+  return segs.length ? segs : [name];
 }
 
-export function suggestConnections(
+/** Berapa keyword `target` yang cocok (persis/sinonim/substring≥4) di `source`. */
+function keywordOverlapCount(source: string[], target: string[]): number {
+  let m = 0;
+  const used = new Set<number>();
+  for (const t of target) {
+    const tSyn = getSynonyms(t);
+    for (let i = 0; i < source.length; i++) {
+      if (used.has(i)) continue;
+      const s = source[i];
+      const sSyn = getSynonyms(s);
+      let hit = false;
+      for (const ts of tSyn) {
+        if (sSyn.has(ts) || (Math.min(s.length, ts.length) >= 4 && (s.includes(ts) || ts.includes(s)))) {
+          hit = true;
+          break;
+        }
+      }
+      if (hit) {
+        m++;
+        used.add(i);
+        break;
+      }
+    }
+  }
+  return m;
+}
+
+/** Skor kemiripan satu segmen Meta vs satu tag (keyword+sinonim, n-gram, brand). */
+function segmentScore(seg: string, tag: string): number {
+  const kw = keywordMatchScore(extractKeywords(seg), extractKeywords(tag));
+  const ng = charNgramSimilarity(cleanName(seg), cleanName(tag));
+  let s = kw * 0.7 + (ng > 0.3 ? ng * 0.3 : 0);
+  const bs = extractMetaBrand(seg);
+  const bt = extractMetaBrand(tag);
+  if (bs && bt) s = bs === bt ? s + 0.1 : s * 0.85; // brand cocok menguatkan, beda melemahkan
+  return Math.min(1, s);
+}
+
+interface TagScore {
+  score: number;     // 0..1
+  contained: boolean;
+}
+
+/** Skor satu tag Shopee terhadap satu nama kampanye Meta. */
+function scoreTagInMeta(metaName: string, metaNorm: string, segs: string[], tag: string): TagScore {
+  const tagFull = normForContainment(tag);
+  const tagStripped = normForContainment(stripBrandPrefix(tag));
+
+  // 1. Containment persis — coba nama tag penuh, lalu tanpa prefix brand
+  //    (nama Meta tanpa-spasi sering tak mengulang brand di tengah).
+  if (tagFull.length >= 4 && metaNorm.includes(tagFull)) return { score: 1, contained: true };
+  if (tagStripped.length >= 5 && metaNorm.includes(tagStripped)) return { score: 1, contained: true };
+
+  // 2. Fuzzy: skor per-segmen (bagus untuk nama ber-spasi & sinonim produk)
+  let seg = 0;
+  for (const s of segs) seg = Math.max(seg, segmentScore(s, tag));
+
+  // 3. Fuzzy: gram-recall atas seluruh nama (bagus untuk tanpa-spasi & urutan),
+  //    di-gate keyword-recall agar tumpang-tindih gram acak tak lolos.
+  const gr = Math.max(gramRecall(metaNorm, tagFull), gramRecall(metaNorm, tagStripped));
+  const tagKw = extractKeywords(tag);
+  const kwRecall = tagKw.length ? keywordOverlapCount(extractKeywords(metaName), tagKw) / tagKw.length : 0;
+  let fuzzy = kwRecall > 0 || gr >= 0.6 ? 0.65 * gr + 0.35 * kwRecall : 0;
+  const bm = extractMetaBrand(metaName);
+  const bt = extractMetaBrand(tag);
+  if (bm && bt && bm !== bt) fuzzy *= 0.7; // lintas-brand: turunkan (sinyal data yg tangkap kasus ini)
+
+  return { score: Math.max(seg, fuzzy), contained: false };
+}
+
+/**
+ * Saran koneksi per kampanye Meta: SEMUA tag Shopee yang terkandung/cocok di
+ * namanya (banyak tag per Meta), plus info skor data untuk tiap tag.
+ * `shopeeCampaigns` sebaiknya hanya tag yang belum tertaut.
+ */
+export function suggestTagGroups(
   metaCampaigns: CampaignLite[],
   shopeeCampaigns: CampaignLite[],
   metaSeries: Map<number, DailySeries>,
   orderSeries: Map<number, DailySeries>,
   maxOrderDate: string | null,
-): SuggestionResult[] {
-  const suggestions: SuggestionResult[] = [];
-  if (shopeeCampaigns.length === 0) return suggestions;
-
-  // Pre-process all Shopee keywords once
-  const shopeeKeyed = shopeeCampaigns.map(shopee => ({
-    campaign: shopee,
-    ctx: buildNameCtx(shopee.name),
-  }));
+): MetaTagSuggestion[] {
+  const groups: MetaTagSuggestion[] = [];
+  if (shopeeCampaigns.length === 0) return groups;
 
   for (const meta of metaCampaigns) {
-    const metaCtx = buildNameCtx(meta.name);
+    const metaNorm = normForContainment(meta.name);
+    const segs = metaSegments(meta.name);
     const mSeries = metaSeries.get(meta.id);
 
-    let bestScore = 0;
-    let bestShopee: CampaignLite | null = null;
-    let bestName = 0;
-    let bestData: DataMatch | null = null;
-
-    for (const sk of shopeeKeyed) {
-      const data = dataMatchScore(mSeries, orderSeries.get(sk.campaign.id), maxOrderDate);
-
-      // 1. Brand filter: skip if brands don't match — kecuali pola data kuat
-      //    (tag Shopee kadang dipakai lintas-brand, mis. OOTD ↔ RV)
-      const brandOk = brandMatches(metaCtx.brand, sk.campaign.name);
-      if (!brandOk && (!data || data.score < 0.55)) continue;
-
-      const nameScore = nameScoreCtx(metaCtx, sk.ctx);
-
-      // 8. Blend dengan sinyal data: >0.25 menguatkan, <0.25 melemahkan.
-      //    Boost diskalakan dengan keyakinan nama (penuh mulai nama ≥ 0.3) —
-      //    kampanye sering diluncurkan serentak, jadi pola harian yang mirip
-      //    TANPA sinyal nama yang berarti bukan bukti pasangan.
-      let final = nameScore;
-      if (data && nameScore >= 0.1) {
-        final = nameScore + 0.4 * (data.score - 0.25) * Math.min(1, nameScore / 0.3);
-      }
-      if (!brandOk) final *= 0.85; // lintas-brand: tetap beri sedikit penalti
-      if (final < 0) final = 0;
-
-      if (final > bestScore && final > 0.25) {
-        bestScore = final;
-        bestShopee = sk.campaign;
-        bestName = nameScore;
-        bestData = data;
-      }
-    }
-
-    if (bestScore > 0.3 && bestShopee) {
-      suggestions.push({
-        metaCampaignId: meta.id,
-        metaCampaignName: meta.name,
-        shopeeCampaignId: bestShopee.id,
-        shopeeCampaignName: bestShopee.name,
-        score: Math.round(bestScore * 100),
-        nameScore: Math.round(bestName * 100),
-        dataScore: bestData ? Math.round(bestData.score * 100) : null,
+    const candidates: TagCandidate[] = [];
+    for (const shopee of shopeeCampaigns) {
+      const { score, contained } = scoreTagInMeta(meta.name, metaNorm, segs, shopee.name);
+      if (score < NAME_SCORE_THRESHOLD) continue;
+      const data = dataMatchScore(mSeries, orderSeries.get(shopee.id), maxOrderDate);
+      candidates.push({
+        shopeeCampaignId: shopee.id,
+        shopeeCampaignName: shopee.name,
+        nameScore: Math.round(Math.min(1, score) * 100),
+        contained,
+        dataScore: data ? Math.round(data.score * 100) : null,
       });
     }
+    if (candidates.length === 0) continue;
+
+    candidates.sort(
+      (a, b) =>
+        Number(b.contained) - Number(a.contained) ||
+        b.nameScore - a.nameScore ||
+        a.shopeeCampaignName.localeCompare(b.shopeeCampaignName),
+    );
+    groups.push({ metaCampaignId: meta.id, metaCampaignName: meta.name, candidates });
   }
 
-  // Sort by score descending
-  suggestions.sort((a, b) => b.score - a.score);
-  return suggestions;
+  // Meta dengan tag terkandung terbanyak di atas.
+  groups.sort((a, b) => {
+    const ac = a.candidates.filter((c) => c.contained).length;
+    const bc = b.candidates.filter((c) => c.contained).length;
+    return bc - ac || b.candidates.length - a.candidates.length || a.metaCampaignName.localeCompare(b.metaCampaignName);
+  });
+  return groups;
 }

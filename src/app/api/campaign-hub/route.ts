@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { suggestConnections, type DailySeries } from "@/lib/matching-engine";
+import { suggestTagGroups, type DailySeries } from "@/lib/matching-engine";
 
 // Total komisi & total klik per tag Shopee (sepanjang waktu). Dipakai UI untuk
 // menyembunyikan tag tak berarti (komisi 0 & klik < 10): tab Hubungkan dasbor &
@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
       ? lastOrder._max.clickTimeUTC.toISOString().slice(0, 10)
       : null;
 
-    const suggestions = suggestConnections(
+    const suggestions = suggestTagGroups(
       metaCampaigns,
       shopeeCampaigns,
       metaSeries,
