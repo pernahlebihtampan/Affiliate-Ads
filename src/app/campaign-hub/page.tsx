@@ -337,7 +337,7 @@ export default function CampaignHubPage() {
               getKey={(m) => m.id}
               displayFn={(m) => `${m.name} (${m.metaAdAccount.name})`}
               placeholder="Cari kampanye Meta..."
-              className="w-[32rem]"
+              className="w-[64rem]"
             />
             <SearchSelect
               label="Tag Shopee"
