@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { showToast } from "@/components/toast-container";
 
@@ -10,6 +10,53 @@ export default function SettingsPage() {
   const [busy, setBusy] = useState<Busy>(null);
   const [restarting, setRestarting] = useState(false);
   const [log, setLog] = useState<string>("");
+
+  // Setting "sembunyikan tag tak berarti" (komisi 0 & klik < 10). Default true.
+  const [hideNoise, setHideNoise] = useState(true);
+  const [savingHideNoise, setSavingHideNoise] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/settings", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((m: Record<string, string>) =>
+        setHideNoise(m.sembunyikanTagTakBerarti !== "false")
+      )
+      .catch(() => {});
+  }, []);
+
+  const toggleHideNoise = async () => {
+    if (savingHideNoise) return;
+    const next = !hideNoise;
+    setSavingHideNoise(true);
+    setHideNoise(next); // optimistis
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: "sembunyikanTagTakBerarti",
+          value: next ? "true" : "false",
+        }),
+      });
+      if (res.ok) {
+        showToast(
+          next
+            ? "Tag tak berarti disembunyikan"
+            : "Semua tag ditampilkan",
+          undefined,
+          "success"
+        );
+      } else {
+        setHideNoise(!next); // rollback
+        showToast("Gagal menyimpan setting", undefined, "destructive");
+      }
+    } catch {
+      setHideNoise(!next); // rollback
+      showToast("Koneksi terputus saat menyimpan setting", undefined, "destructive");
+    } finally {
+      setSavingHideNoise(false);
+    }
+  };
 
   // Tunggu server hidup lagi setelah restart, lalu muat ulang halaman.
   const waitForServerAndReload = () => {
@@ -98,8 +145,47 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-2xl font-bold">Pengaturan</h1>
           <p className="text-sm text-muted-foreground">
-            Kontrol proses server: tarik versi terbaru dari GitHub dan muat ulang.
+            Preferensi tampilan &amp; kontrol proses server.
           </p>
+        </div>
+
+        <div className="bg-white rounded-lg border p-4 space-y-4">
+          <div>
+            <h2 className="font-medium">Tampilan Data</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Kelola tag Shopee yang dianggap tak berarti di seluruh tampilan.
+            </p>
+          </div>
+
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm font-medium">
+                Sembunyikan tag tak berarti (komisi 0 &amp; klik &lt; 10)
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                Bila aktif, tag Shopee tanpa komisi dan berklik &lt; 10 disembunyikan
+                di dasbor (tab Hubungkan, Laporan, Rentang), Ringkasan, dan dropdown
+                &quot;Cari Tag&quot; di Pusat Kampanye. Matikan untuk menampilkan
+                semua tag. Halaman lain menerapkan perubahan saat dibuka/di-refresh.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={hideNoise}
+              onClick={toggleHideNoise}
+              disabled={savingHideNoise}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+                hideNoise ? "bg-primary" : "bg-gray-300"
+              }`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                  hideNoise ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-lg border p-4 space-y-4">

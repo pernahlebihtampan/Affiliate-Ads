@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { showToast } from "@/components/toast-container";
 import { SearchSelect } from "@/components/ui/search-select";
+import { isNoiseTag } from "@/lib/utils";
+import { useHideNoiseTags } from "@/lib/use-hide-noise-tags";
 
 interface MetaCampaign {
   id: number;
@@ -158,6 +160,7 @@ function QuickShopeeSearch<T extends { id: number }>({
 }
 
 export default function CampaignHubPage() {
+  const hideNoise = useHideNoiseTags();
   const [metaCampaigns, setMetaCampaigns] = useState<MetaCampaign[]>([]);
   const [shopeeCampaigns, setShopeeCampaigns] = useState<ShopeeCampaign[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -318,10 +321,11 @@ export default function CampaignHubPage() {
     return true;
   });
 
-  // Tag belum tertaut, tanpa yang tak berarti (komisi 0 & klik < 10 sepanjang
-  // waktu) — sumber untuk dropdown "Cari Tag" (SearchSelect utama & QuickShopeeSearch).
+  // Tag belum tertaut — sumber untuk dropdown "Cari Tag" (SearchSelect utama &
+  // QuickShopeeSearch). Bila `hideNoise` aktif (setting `sembunyikanTagTakBerarti`),
+  // buang tag tak berarti (komisi 0 & klik < 10 sepanjang waktu).
   const unlinkedShopee = shopeeCampaigns.filter(
-    (s) => !s.hub && !((s.komisiTotal ?? 0) === 0 && (s.klikTotal ?? 0) < 10),
+    (s) => !s.hub && !(hideNoise && isNoiseTag(s.komisiTotal ?? 0, s.klikTotal ?? 0)),
   );
 
   return (

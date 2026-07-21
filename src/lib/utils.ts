@@ -33,6 +33,17 @@ export function spendWithPpn(spendIdr: number): number {
 }
 
 /**
+ * Tag Shopee "tak berarti": total komisi 0 DAN klik < 10. Dipakai untuk
+ * menyembunyikan tag ini di dasbor, Ringkasan, dan Pusat Kampanye. Penyembunyian
+ * bisa dinonaktifkan lewat setting `sembunyikanTagTakBerarti` (lihat
+ * `useHideNoiseTags`). Predikat murni ini dipakai di banyak tampilan agar
+ * ambang (0 & 10) tidak terduplikasi.
+ */
+export function isNoiseTag(komisi: number, klik: number): boolean {
+  return komisi === 0 && klik < 10;
+}
+
+/**
  * Rentang tanggal default untuk halaman analisis: 30 hari sebelum kemarin
  * s/d kemarin. Hari berjalan sengaja dikecualikan — datanya belum lengkap
  * sebelum CSV berikutnya diimpor, sehingga angka hari ini selalu tampak anjlok.

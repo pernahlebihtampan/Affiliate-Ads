@@ -6,7 +6,8 @@ import { DailyChart } from "@/components/daily-chart";
 import { DailyClicksChart } from "@/components/daily-clicks-chart";
 import { DateInput } from "@/components/ui/date-input";
 import { SearchSelect } from "@/components/ui/search-select";
-import { defaultDateRange, formatCurrency, formatNumber } from "@/lib/utils";
+import { defaultDateRange, formatCurrency, formatNumber, isNoiseTag } from "@/lib/utils";
+import { useHideNoiseTags } from "@/lib/use-hide-noise-tags";
 
 // Rincian sisi Shopee per tag (untuk baris expand di bawah baris kampanye
 // Meta). Spend & klik Meta ada di level Meta, tidak dirinci per tag.
@@ -102,6 +103,7 @@ interface DailyDataPoint {
 }
 
 export default function DashboardPage() {
+  const hideNoise = useHideNoiseTags();
   const [rows, setRows] = useState<DashboardRow[]>([]);
   const [totals, setTotals] = useState<Totals | null>(null);
   // Spend kampanye Meta yang belum ditautkan di Campaign Hub (tidak masuk
@@ -236,18 +238,20 @@ export default function DashboardPage() {
   // Kartu ringkasan di atas tetap memakai total penuh; footer tabel dihitung ulang
   // agar cocok dengan baris yang terlihat (baris tersembunyi spend & komisinya 0,
   // jadi hanya Klik Shopee & Pesanan yang berkurang — ROAS/Spend/Komisi tetap).
-  const isNoiseTag = (totalKomisi: number, shopeeClicks: number) =>
-    totalKomisi === 0 && shopeeClicks < 10;
-  const visibleRows = rows
-    .map((r) => ({
-      ...r,
-      tags: r.tags.filter((t) => !isNoiseTag(t.totalKomisi, t.shopeeClicks)),
-    }))
-    .filter(
-      (r) => !(r.metaCampaignId === null && isNoiseTag(r.totalKomisi, r.shopeeClicks))
-    );
+  // Bila `hideNoise` false (setting `sembunyikanTagTakBerarti`), tampilkan semua.
+  const visibleRows = hideNoise
+    ? rows
+        .map((r) => ({
+          ...r,
+          tags: r.tags.filter((t) => !isNoiseTag(t.totalKomisi, t.shopeeClicks)),
+        }))
+        .filter(
+          (r) => !(r.metaCampaignId === null && isNoiseTag(r.totalKomisi, r.shopeeClicks))
+        )
+    : rows;
   const visibleTotals: Totals | null = (() => {
     if (!totals) return null;
+    if (!hideNoise) return totals;
     const hidden = rows.filter(
       (r) => r.metaCampaignId === null && isNoiseTag(r.totalKomisi, r.shopeeClicks)
     );

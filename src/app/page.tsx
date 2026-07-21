@@ -7,7 +7,8 @@ import { FileDropCard, type ImportedInfo } from "@/components/file-drop-card";
 import { showToast } from "@/components/toast-container";
 import { DateInput } from "@/components/ui/date-input";
 import { SearchSelect } from "@/components/ui/search-select";
-import { defaultDateRange } from "@/lib/utils";
+import { defaultDateRange, isNoiseTag } from "@/lib/utils";
+import { useHideNoiseTags } from "@/lib/use-hide-noise-tags";
 import type { ReportRow, ReportTotals } from "@/lib/daily-snapshot";
 
 type TabId = "impor" | "hubungkan" | "laporan" | "rentang";
@@ -73,8 +74,19 @@ export default function DailyDashboardPage() {
   // Campaign Hub (untuk tab Hubungkan)
   const [metaCampaigns, setMetaCampaigns] = useState<{ id: number; name: string }[]>([]);
   const [unlinkedTags, setUnlinkedTags] = useState<
-    { id: number; name: string; accountName: string }[]
+    { id: number; name: string; accountName: string; komisiTotal: number; klikTotal: number }[]
   >([]);
+  const hideNoise = useHideNoiseTags();
+  // Tag belum tertaut yang terlihat: bila `hideNoise` aktif, buang tag tak
+  // berarti (komisi 0 & klik < 10 sepanjang waktu). Filter di render agar ikut
+  // berubah saat setting termuat setelah fetch.
+  const visibleUnlinkedTags = useMemo(
+    () =>
+      hideNoise
+        ? unlinkedTags.filter((t) => !isNoiseTag(t.komisiTotal, t.klikTotal))
+        : unlinkedTags,
+    [unlinkedTags, hideNoise]
+  );
   const [linkPick, setLinkPick] = useState<Record<number, number>>({}); // shopeeId → metaId
 
   // Lazy-refresh: Laporan & Rentang ditandai "perlu muat ulang" saat sumbernya
@@ -111,14 +123,24 @@ export default function DailyDashboardPage() {
     );
     setUnlinkedTags(
       (data.shopeeCampaigns ?? [])
-        // Belum tertaut, dan sembunyikan tag tak berarti: komisi 0 & klik < 10.
-        .filter(
-          (s: { hub: unknown; komisiTotal?: number; klikTotal?: number }) =>
-            !s.hub && !((s.komisiTotal ?? 0) === 0 && (s.klikTotal ?? 0) < 10)
+        // Semua tag belum tertaut; penyembunyian tag tak berarti dilakukan saat
+        // render (visibleUnlinkedTags) sesuai setting `sembunyikanTagTakBerarti`.
+        .filter((s: { hub: unknown }) => !s.hub)
+        .map(
+          (s: {
+            id: number;
+            name: string;
+            shopeeAccount: { name: string };
+            komisiTotal?: number;
+            klikTotal?: number;
+          }) => ({
+            id: s.id,
+            name: s.name,
+            accountName: s.shopeeAccount?.name ?? "",
+            komisiTotal: s.komisiTotal ?? 0,
+            klikTotal: s.klikTotal ?? 0,
+          })
         )
-        .map((s: { id: number; name: string; shopeeAccount: { name: string } }) => ({
-          id: s.id, name: s.name, accountName: s.shopeeAccount?.name ?? "",
-        }))
     );
   }, []);
 
@@ -233,7 +255,7 @@ export default function DailyDashboardPage() {
 
   const tabs: { id: TabId; label: string; badge?: number }[] = [
     { id: "impor", label: "Impor", badge: pendingCards || undefined },
-    { id: "hubungkan", label: "Hubungkan", badge: unlinkedTags.length || undefined },
+    { id: "hubungkan", label: "Hubungkan", badge: visibleUnlinkedTags.length || undefined },
     { id: "laporan", label: "Laporan" },
     { id: "rentang", label: "Rentang" },
   ];
@@ -389,13 +411,13 @@ export default function DailyDashboardPage() {
                 Buka Pusat Kampanye (Auto-Suggest) →
               </a>
             </div>
-            {unlinkedTags.length === 0 ? (
+            {visibleUnlinkedTags.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Semua tag Shopee sudah tertaut. 🎉
               </p>
             ) : (
               <div className="bg-white rounded-lg border divide-y">
-                {unlinkedTags.map((tag) => (
+                {visibleUnlinkedTags.map((tag) => (
                   <div key={tag.id} className="flex items-center gap-3 p-3 flex-wrap">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{tag.name}</p>
@@ -444,6 +466,7 @@ export default function DailyDashboardPage() {
             <ReportTable
               rows={daily?.snapshot?.rows ?? []}
               totals={daily?.snapshot?.totals ?? null}
+              hideNoise={hideNoise}
               emptyMessage="Belum ada impor untuk tanggal ini. Buka tab Impor untuk mengunggah file CSV."
             />
             <p className="text-xs text-muted-foreground">
@@ -494,6 +517,7 @@ export default function DailyDashboardPage() {
                     title={formatTanggal(t.reportDate)}
                     rows={t.rows}
                     totals={t.totals}
+                    hideNoise={hideNoise}
                   />
                 ))}
               </div>

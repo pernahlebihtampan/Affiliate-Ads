@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { formatCurrency, formatNumber } from "@/lib/utils";
+import { formatCurrency, formatNumber, isNoiseTag } from "@/lib/utils";
 import type { ReportRow, ReportTotals } from "@/lib/daily-snapshot";
 
 // Label Indonesia untuk "Penayangan kampanye" Meta (MetaCampaign.status)
@@ -88,12 +88,15 @@ export function ReportTable({
   totals,
   title,
   emptyMessage = "Belum ada data untuk tanggal ini. Impor CSV di tab Impor.",
+  hideNoise = true,
 }: {
   rows: ReportRow[];
   totals: ReportTotals | null;
   // Bar judul di dalam kartu (mis. tanggal di tab Rentang) agar menyatu ke tabel
   title?: string;
   emptyMessage?: string;
+  // Sembunyikan tag tak berarti (setting `sembunyikanTagTakBerarti`); default true.
+  hideNoise?: boolean;
 }) {
   // Default: SEMUA baris ter-expand. Simpan set yang DICIUTKAN (kosong = semua
   // terbuka) supaya baris baru dari snapshot lain otomatis ikut terbuka.
@@ -111,22 +114,24 @@ export function ReportTable({
   // tertaut) yang juga tak berarti. Baris kampanye Meta tetap tampil (punya spend/
   // ROAS); totalnya utuh, jadi footer dihitung ulang hanya dengan mengurangi baris
   // tag lepas yang disembunyikan (spend & komisinya 0 → ROAS/profit tak berubah).
-  const isNoiseTag = (totalKomisi: number, shopeeClicks: number) =>
-    totalKomisi === 0 && shopeeClicks < 10;
+  // Bila `hideNoise` false, semua baris & total ditampilkan apa adanya.
   const visibleRows = useMemo(
     () =>
-      rows
-        .map((r) => ({
-          ...r,
-          tags: r.tags.filter((t) => !isNoiseTag(t.totalKomisi, t.shopeeClicks)),
-        }))
-        .filter(
-          (r) => !(r.metaCampaignId === null && isNoiseTag(r.totalKomisi, r.shopeeClicks))
-        ),
-    [rows]
+      hideNoise
+        ? rows
+            .map((r) => ({
+              ...r,
+              tags: r.tags.filter((t) => !isNoiseTag(t.totalKomisi, t.shopeeClicks)),
+            }))
+            .filter(
+              (r) => !(r.metaCampaignId === null && isNoiseTag(r.totalKomisi, r.shopeeClicks))
+            )
+        : rows,
+    [rows, hideNoise]
   );
   const visibleTotals = useMemo<ReportTotals | null>(() => {
     if (!totals) return null;
+    if (!hideNoise) return totals;
     const hidden = rows.filter(
       (r) => r.metaCampaignId === null && isNoiseTag(r.totalKomisi, r.shopeeClicks)
     );
@@ -148,7 +153,7 @@ export function ReportTable({
       items: totals.items - d.items,
       nilaiPembelian: totals.nilaiPembelian - d.nilaiPembelian,
     };
-  }, [rows, totals]);
+  }, [rows, totals, hideNoise]);
 
   // Baris yang punya rincian per-tag (1 Meta : >1 tag Shopee terlihat)
   const expandableIds = useMemo(
