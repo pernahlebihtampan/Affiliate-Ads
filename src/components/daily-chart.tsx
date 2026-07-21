@@ -215,11 +215,11 @@ export function DailyChart({ data }: DailyChartProps) {
             axisLine={false}
             domain={[yMin, yMax]}
             tickFormatter={(value) =>
-              value >= 1000000
+              Math.abs(value) >= 1000000
                 ? `${(value / 1000000).toFixed(1)}jt`
-                : value >= 1000
+                : Math.abs(value) >= 1000
                 ? `${(value / 1000).toFixed(0)}rb`
-                : `${value}`
+                : `${Math.round(value)}`
             }
           />
           <Tooltip content={<CustomTooltip />} />
